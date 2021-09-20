@@ -8,32 +8,35 @@
 #include "types.h"
 
 TEST(Lib, Meta) {
-    ASSERT_FALSE(entt::resolve_id("position"_hs));
+    using namespace entt::literals;
+
+    ASSERT_FALSE(entt::resolve("position"_hs));
 
     userdata ud{};
 
     cr_plugin ctx;
-    ctx.userdata = &ud;
     cr_plugin_load(ctx, PLUGIN);
+
+    ctx.userdata = &ud;
     cr_plugin_update(ctx);
 
     entt::meta<double>().conv<int>();
 
-    ASSERT_TRUE(entt::resolve_id("position"_hs));
-    ASSERT_TRUE(entt::resolve_id("velocity"_hs));
+    ASSERT_TRUE(entt::resolve("position"_hs));
+    ASSERT_TRUE(entt::resolve("velocity"_hs));
 
-    auto pos = entt::resolve_id("position"_hs).construct(42., 3.);
-    auto vel = entt::resolve_id("velocity"_hs).ctor<>().invoke();
+    auto pos = entt::resolve("position"_hs).construct(42., 3.);
+    auto vel = entt::resolve("velocity"_hs).ctor<>().invoke();
 
     ASSERT_TRUE(pos && vel);
 
     ASSERT_EQ(pos.type().data("x"_hs).type(), entt::resolve<int>());
-    ASSERT_TRUE(pos.type().data("y"_hs).get(pos).try_cast<int>());
+    ASSERT_NE(pos.type().data("y"_hs).get(pos).try_cast<int>(), nullptr);
     ASSERT_EQ(pos.type().data("x"_hs).get(pos).cast<int>(), 42);
     ASSERT_EQ(pos.type().data("y"_hs).get(pos).cast<int>(), 3);
 
     ASSERT_EQ(vel.type().data("dx"_hs).type(), entt::resolve<double>());
-    ASSERT_TRUE(vel.type().data("dy"_hs).get(vel).convert<double>());
+    ASSERT_TRUE(vel.type().data("dy"_hs).get(vel).allow_cast<double>());
     ASSERT_EQ(vel.type().data("dx"_hs).get(vel).cast<double>(), 0.);
     ASSERT_EQ(vel.type().data("dy"_hs).get(vel).cast<double>(), 0.);
 
@@ -47,6 +50,6 @@ TEST(Lib, Meta) {
 
     cr_plugin_close(ctx);
 
-    ASSERT_FALSE(entt::resolve_id("position"_hs));
-    ASSERT_FALSE(entt::resolve_id("velocity"_hs));
+    ASSERT_FALSE(entt::resolve("position"_hs));
+    ASSERT_FALSE(entt::resolve("velocity"_hs));
 }

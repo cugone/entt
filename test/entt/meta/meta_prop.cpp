@@ -1,3 +1,4 @@
+#include <string>
 #include <gtest/gtest.h>
 #include <entt/core/hashed_string.hpp>
 #include <entt/meta/factory.hpp>
@@ -9,14 +10,31 @@ struct base_2_t {};
 struct derived_t: base_1_t, base_2_t {};
 
 struct MetaProp: ::testing::Test {
-    static void SetUpTestCase() {
-        entt::meta<base_1_t>().prop("int"_hs, 42);
-        entt::meta<base_2_t>().prop("bool"_hs, false);
-        entt::meta<derived_t>().base<base_1_t>().base<base_2_t>();
+    void SetUp() override {
+        using namespace entt::literals;
+
+        entt::meta<base_1_t>()
+            .type("base_1"_hs)
+            .prop("int"_hs, 42);
+
+        entt::meta<base_2_t>()
+            .type("base_2"_hs)
+            .props(std::make_pair("bool"_hs, false), std::make_pair("char[]"_hs, "char[]"));
+
+        entt::meta<derived_t>()
+            .type("derived"_hs)
+            .base<base_1_t>()
+            .base<base_2_t>();
+    }
+
+    void TearDown() override {
+        entt::meta_reset();
     }
 };
 
 TEST_F(MetaProp, Functionalities) {
+    using namespace entt::literals;
+
     auto prop = entt::resolve<base_1_t>().prop("int"_hs);
 
     ASSERT_TRUE(prop);
@@ -25,6 +43,8 @@ TEST_F(MetaProp, Functionalities) {
 }
 
 TEST_F(MetaProp, FromBase) {
+    using namespace entt::literals;
+
     auto type = entt::resolve<derived_t>();
     auto prop_bool = type.prop("bool"_hs);
     auto prop_int = type.prop("int"_hs);
@@ -34,4 +54,39 @@ TEST_F(MetaProp, FromBase) {
 
     ASSERT_FALSE(prop_bool.value().cast<bool>());
     ASSERT_EQ(prop_int.value().cast<int>(), 42);
+}
+
+TEST_F(MetaProp, DeducedArrayType) {
+    using namespace entt::literals;
+
+    auto prop = entt::resolve<base_2_t>().prop("char[]"_hs);
+
+    ASSERT_TRUE(prop);
+    ASSERT_EQ(prop.key(), "char[]"_hs);
+    ASSERT_EQ(prop.value().type(), entt::resolve<const char *>());
+    ASSERT_EQ(strcmp(prop.value().cast<const char *>(), "char[]"), 0);
+}
+
+TEST_F(MetaProp, ReRegistration) {
+    using namespace entt::literals;
+
+    SetUp();
+
+    auto *node = entt::internal::meta_node<base_1_t>::resolve();
+    auto type = entt::resolve<base_1_t>();
+
+    ASSERT_NE(node->prop, nullptr);
+    ASSERT_EQ(node->prop->next, nullptr);
+
+    ASSERT_TRUE(type.prop("int"_hs));
+    ASSERT_EQ(type.prop("int"_hs).value().cast<int>(), 42);
+
+    entt::meta<base_1_t>().prop("double"_hs, 3.);
+
+    ASSERT_NE(node->prop, nullptr);
+    ASSERT_EQ(node->prop->next, nullptr);
+
+    ASSERT_FALSE(type.prop("int"_hs));
+    ASSERT_TRUE(type.prop("double"_hs));
+    ASSERT_EQ(type.prop("double"_hs).value().cast<double>(), 3.);
 }

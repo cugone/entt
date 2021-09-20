@@ -1,12 +1,19 @@
 #include <gtest/gtest.h>
 #include <entt/core/hashed_string.hpp>
 #include <entt/core/utility.hpp>
+#include <entt/entity/registry.hpp>
 #include <entt/meta/factory.hpp>
 #include <entt/meta/meta.hpp>
 #include <entt/meta/resolve.hpp>
 
-struct base_t { char value{}; };
-struct derived_t: base_t {};
+struct base_t {
+    base_t(): value{'c'} {}
+    char value;
+};
+
+struct derived_t: base_t {
+    derived_t(): base_t{} {}
+};
 
 struct clazz_t {
     clazz_t(const base_t &other, int iv)
@@ -17,37 +24,56 @@ struct clazz_t {
         : i{iv}, c{cv}
     {}
 
+    operator int() const { return i; }
+
     static clazz_t factory(int value) {
-        return {value, 'c'};
+        return { value, 'c' };
     }
 
     static clazz_t factory(base_t other, int value, int mul) {
-        return {value * mul, other.value};
+        return { value * mul, other.value };
     }
 
     int i{};
     char c{};
 };
 
-struct MetaCtor: ::testing::Test {
-    static void SetUpTestCase() {
-        entt::meta<double>().conv<int>();
-        entt::meta<derived_t>().base<base_t>();
+double double_factory() { return 42.; }
 
-        entt::meta<clazz_t>().type("clazz"_hs)
-                .ctor<const base_t &, int>()
-                .ctor<const int &, char>().prop(3, false)
-                .ctor<entt::overload<clazz_t(int)>(&clazz_t::factory)>().prop('c', 42)
-                .ctor<entt::overload<clazz_t(base_t, int, int)>(&clazz_t::factory)>();
+struct MetaCtor: ::testing::Test {
+    void SetUp() override {
+        using namespace entt::literals;
+
+        entt::meta<double>()
+            .type("double"_hs)
+            .ctor<double_factory>();
+
+        entt::meta<derived_t>()
+            .type("derived"_hs)
+            .base<base_t>();
+
+        entt::meta<clazz_t>()
+            .type("clazz"_hs)
+            .ctor<&entt::registry::emplace_or_replace<clazz_t, const int &, const char &>, entt::as_ref_t>()
+            .ctor<const base_t &, int>()
+            .ctor<const int &, char>().prop(3, false)
+            .ctor<entt::overload<clazz_t(int)>(clazz_t::factory)>().prop('c', 42)
+            .ctor<entt::overload<clazz_t(base_t, int, int)>(clazz_t::factory)>()
+            .conv<int>();
+    }
+
+    void TearDown() override {
+        entt::meta_reset();
     }
 };
 
 TEST_F(MetaCtor, Functionalities) {
+    using namespace entt::literals;
+
     auto ctor = entt::resolve<clazz_t>().ctor<const int &, char>();
 
     ASSERT_TRUE(ctor);
-    ASSERT_EQ(ctor.parent(), entt::resolve_id("clazz"_hs));
-    ASSERT_EQ(ctor.size(), 2u);
+    ASSERT_EQ(ctor.arity(), 2u);
     ASSERT_EQ(ctor.arg(0u), entt::resolve<int>());
     ASSERT_EQ(ctor.arg(1u), entt::resolve<char>());
     ASSERT_FALSE(ctor.arg(2u));
@@ -76,11 +102,12 @@ TEST_F(MetaCtor, Functionalities) {
 }
 
 TEST_F(MetaCtor, Func) {
+    using namespace entt::literals;
+
     auto ctor = entt::resolve<clazz_t>().ctor<int>();
 
     ASSERT_TRUE(ctor);
-    ASSERT_EQ(ctor.parent(), entt::resolve_id("clazz"_hs));
-    ASSERT_EQ(ctor.size(), 1u);
+    ASSERT_EQ(ctor.arity(), 1u);
     ASSERT_EQ(ctor.arg(0u), entt::resolve<int>());
     ASSERT_FALSE(ctor.arg(1u));
 
@@ -117,11 +144,30 @@ TEST_F(MetaCtor, MetaAnyArgs) {
 
 TEST_F(MetaCtor, InvalidArgs) {
     auto ctor = entt::resolve<clazz_t>().ctor<int, char>();
-    ASSERT_FALSE(ctor.invoke('c', 42));
+    ASSERT_FALSE(ctor.invoke(entt::meta_any{}, derived_t{}));
 }
 
 TEST_F(MetaCtor, CastAndConvert) {
-    auto any = entt::resolve<clazz_t>().ctor<const base_t &, int>().invoke(derived_t{{'c'}}, 42.);
+    auto any = entt::resolve<clazz_t>().ctor<const base_t &, int>().invoke(derived_t{}, clazz_t{42, 'd'});
+
+    ASSERT_TRUE(any);
+    ASSERT_EQ(any.cast<clazz_t>().i, 42);
+    ASSERT_EQ(any.cast<clazz_t>().c, 'c');
+}
+
+TEST_F(MetaCtor, ArithmeticConversion) {
+    auto any = entt::resolve<clazz_t>().ctor<int, char>().invoke(true, 4.2);
+
+    ASSERT_TRUE(any);
+    ASSERT_EQ(any.cast<clazz_t>().i, 1);
+    ASSERT_EQ(any.cast<clazz_t>().c, char{4});
+}
+
+TEST_F(MetaCtor, ConstNonConstRefArgs) {
+    int ivalue = 42;
+    const char cvalue = 'c';
+
+    auto any = entt::resolve<clazz_t>().ctor<int, char>().invoke(entt::forward_as_meta(ivalue), entt::forward_as_meta(cvalue));
 
     ASSERT_TRUE(any);
     ASSERT_EQ(any.cast<clazz_t>().i, 42);
@@ -129,7 +175,7 @@ TEST_F(MetaCtor, CastAndConvert) {
 }
 
 TEST_F(MetaCtor, FuncMetaAnyArgs) {
-    auto any = entt::resolve<clazz_t>().ctor<base_t, int>().invoke(entt::meta_any{base_t{'c'}}, entt::meta_any{42});
+    auto any = entt::resolve<clazz_t>().ctor<int>().invoke(entt::meta_any{42});
 
     ASSERT_TRUE(any);
     ASSERT_EQ(any.cast<clazz_t>().i, 42);
@@ -137,14 +183,107 @@ TEST_F(MetaCtor, FuncMetaAnyArgs) {
 }
 
 TEST_F(MetaCtor, FuncInvalidArgs) {
-    auto ctor = entt::resolve<clazz_t>().ctor<const base_t &, int>();
-    ASSERT_FALSE(ctor.invoke(base_t{}, 'c'));
+    auto ctor = entt::resolve<clazz_t>().ctor<int>();
+    ASSERT_FALSE(ctor.invoke(derived_t{}));
 }
 
 TEST_F(MetaCtor, FuncCastAndConvert) {
-    auto any = entt::resolve<clazz_t>().ctor<base_t, int, int>().invoke(derived_t{{'c'}}, 3., 3);
+    auto any = entt::resolve<clazz_t>().ctor<base_t, int, int>().invoke(derived_t{}, 3., clazz_t{3, 'd'});
 
     ASSERT_TRUE(any);
     ASSERT_EQ(any.cast<clazz_t>().i, 9);
     ASSERT_EQ(any.cast<clazz_t>().c, 'c');
+}
+
+TEST_F(MetaCtor, FuncArithmeticConversion) {
+    auto any = entt::resolve<clazz_t>().ctor<int>().invoke(4.2);
+
+    ASSERT_TRUE(any);
+    ASSERT_EQ(any.cast<clazz_t>().i, 4);
+    ASSERT_EQ(any.cast<clazz_t>().c, 'c');
+}
+
+TEST_F(MetaCtor, FuncConstNonConstRefArgs) {
+    int ivalue = 42;
+    auto ctor = entt::resolve<clazz_t>().ctor<int>();
+
+    auto any = ctor.invoke(entt::forward_as_meta(ivalue));
+    auto other = ctor.invoke(entt::make_meta<const int &>(ivalue));
+
+    ASSERT_TRUE(any);
+    ASSERT_TRUE(other);
+    ASSERT_EQ(any.cast<clazz_t>().i, 42);
+    ASSERT_EQ(other.cast<clazz_t>().i, 42);
+}
+
+TEST_F(MetaCtor, ExternalMemberFunction) {
+    using namespace entt::literals;
+
+    auto ctor = entt::resolve<clazz_t>().ctor<entt::registry &, entt::entity, const int &, const char &>();
+
+    ASSERT_TRUE(ctor);
+    ASSERT_EQ(ctor.arity(), 4u);
+    ASSERT_EQ(ctor.arg(0u), entt::resolve<entt::registry>());
+    ASSERT_EQ(ctor.arg(1u), entt::resolve<entt::entity>());
+    ASSERT_EQ(ctor.arg(2u), entt::resolve<int>());
+    ASSERT_EQ(ctor.arg(3u), entt::resolve<char>());
+    ASSERT_FALSE(ctor.arg(4u));
+
+    entt::registry registry;
+    const auto entity = registry.create();
+
+    ASSERT_FALSE(registry.all_of<clazz_t>(entity));
+
+    const auto any = ctor.invoke(entt::forward_as_meta(registry), entity, 3, 'c');
+
+    ASSERT_TRUE(any);
+    ASSERT_TRUE(registry.all_of<clazz_t>(entity));
+    ASSERT_EQ(registry.get<clazz_t>(entity).i, 3);
+    ASSERT_EQ(registry.get<clazz_t>(entity).c, 'c');
+}
+
+TEST_F(MetaCtor, ImplicitlyGeneratedDefaultConstructor) {
+    auto type = entt::resolve<int>();
+
+    // implicitly generated default constructor is not listed among registered
+    ASSERT_EQ(type.ctor().begin(), type.ctor().end());
+    ASSERT_FALSE(type.ctor<>());
+
+    auto any = type.construct();
+
+    ASSERT_TRUE(any);
+    ASSERT_EQ(any.type(), entt::resolve<int>());
+    ASSERT_EQ(any.cast<int>(), 0);
+}
+
+TEST_F(MetaCtor, OverrideImplicitlyGeneratedDefaultConstructor) {
+    auto type = entt::resolve<double>();
+
+    // implicitly generated default constructor is not listed among registered
+    ASSERT_EQ(++type.ctor().begin(), type.ctor().end());
+    ASSERT_TRUE(type.ctor<>());
+    ASSERT_EQ(type.ctor<>().arity(), 0u);
+    ASSERT_EQ(type.ctor<>().arg(0), entt::meta_type{});
+
+    auto any = type.ctor<>().invoke();
+
+    ASSERT_TRUE(any);
+    ASSERT_EQ(any.type(), entt::resolve<double>());
+    ASSERT_EQ(any.cast<double>(), 42.);
+}
+
+TEST_F(MetaCtor, NonDefaultConstructibleType) {
+    auto type = entt::resolve<clazz_t>();
+    // no implicitly generated default constructor
+    ASSERT_FALSE(type.construct());
+}
+
+TEST_F(MetaCtor, ReRegistration) {
+    SetUp();
+
+    auto *node = entt::internal::meta_node<double>::resolve();
+
+    ASSERT_NE(node->ctor, nullptr);
+    // implicitly generated default constructor is not cleared
+    ASSERT_NE(node->default_constructor, nullptr);
 }

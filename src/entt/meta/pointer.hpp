@@ -1,6 +1,7 @@
 #ifndef ENTT_META_POINTER_HPP
 #define ENTT_META_POINTER_HPP
 
+
 #include <memory>
 #include <type_traits>
 #include "type_traits.hpp"
@@ -16,6 +17,17 @@ namespace entt {
 template<typename Type>
 struct is_meta_pointer_like<Type *>
         : std::true_type
+{};
+
+
+/**
+ * @brief Partial specialization used to reject pointers to arrays.
+ * @tparam Type Type of elements of the array.
+ * @tparam N Number of elements of the array.
+ */
+template<typename Type, std::size_t N>
+struct is_meta_pointer_like<Type(*)[N]>
+    : std::false_type
 {};
 
 

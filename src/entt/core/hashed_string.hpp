@@ -62,7 +62,7 @@ struct fnv1a_traits<std::uint64_t> {
  */
 template<typename Char>
 class basic_hashed_string {
-    using traits_type = internal::fnv1a_traits<id_type>;
+    using hs_traits = internal::fnv1a_traits<id_type>;
 
     struct const_wrapper {
         // non-explicit constructor on purpose
@@ -72,10 +72,10 @@ class basic_hashed_string {
 
     // Fowler–Noll–Vo hash function v. 1a - the good
     [[nodiscard]] static constexpr id_type helper(const Char *curr) ENTT_NOEXCEPT {
-        auto value = traits_type::offset;
+        auto value = hs_traits::offset;
 
         while(*curr != 0) {
-            value = (value ^ static_cast<traits_type::type>(*(curr++))) * traits_type::prime;
+            value = (value ^ static_cast<hs_traits::type>(*(curr++))) * hs_traits::prime;
         }
 
         return value;
@@ -88,6 +88,18 @@ public:
     using hash_type = id_type;
 
     /**
+     * @brief Returns directly the numeric representation of a string view.
+     * @param str Human-readable identifer.
+     * @param size Length of the string to hash.
+     * @return The numeric representation of the string.
+     */
+    [[nodiscard]] static constexpr hash_type value(const value_type *str, std::size_t size) ENTT_NOEXCEPT {
+        id_type partial{hs_traits::offset};
+        while(size--) { partial = (partial ^ (str++)[0]) * hs_traits::prime; }
+        return partial;
+    }
+
+    /**
      * @brief Returns directly the numeric representation of a string.
      *
      * Forcing template resolution avoids implicit conversions. An
@@ -95,7 +107,7 @@ public:
      * characters.<br/>
      * Example of use:
      * @code{.cpp}
-     * const auto value = basic_hashed_string<char>::to_value("my.png");
+     * const auto value = basic_hashed_string<char>::value("my.png");
      * @endcode
      *
      * @tparam N Number of characters of the identifier.
@@ -114,18 +126,6 @@ public:
      */
     [[nodiscard]] static hash_type value(const_wrapper wrapper) ENTT_NOEXCEPT {
         return helper(wrapper.str);
-    }
-
-    /**
-     * @brief Returns directly the numeric representation of a string view.
-     * @param str Human-readable identifer.
-     * @param size Length of the string to hash.
-     * @return The numeric representation of the string.
-     */
-    [[nodiscard]] static hash_type value(const value_type *str, std::size_t size) ENTT_NOEXCEPT {
-        id_type partial{traits_type::offset};
-        while(size--) { partial = (partial^(str++)[0])*traits_type::prime; }
-        return partial;
     }
 
     /*! @brief Constructs an empty hashed string. */
@@ -212,7 +212,7 @@ private:
  * @param str Human-readable identifer.
  */
 template<typename Char, std::size_t N>
-basic_hashed_string(const Char (&str)[N]) ENTT_NOEXCEPT
+basic_hashed_string(const Char (&str)[N])
 -> basic_hashed_string<Char>;
 
 
@@ -237,7 +237,7 @@ using hashed_string = basic_hashed_string<char>;
 using hashed_wstring = basic_hashed_string<wchar_t>;
 
 
-}
+inline namespace literals {
 
 
 /**
@@ -245,7 +245,7 @@ using hashed_wstring = basic_hashed_string<wchar_t>;
  * @param str The literal without its suffix.
  * @return A properly initialized hashed string.
  */
-[[nodiscard]] constexpr entt::hashed_string operator"" ENTT_HS_SUFFIX(const char *str, std::size_t) ENTT_NOEXCEPT {
+[[nodiscard]] constexpr entt::hashed_string operator"" _hs(const char *str, std::size_t) ENTT_NOEXCEPT {
     return entt::hashed_string{str};
 }
 
@@ -255,8 +255,14 @@ using hashed_wstring = basic_hashed_string<wchar_t>;
  * @param str The literal without its suffix.
  * @return A properly initialized hashed wstring.
  */
-[[nodiscard]] constexpr entt::hashed_wstring operator"" ENTT_HWS_SUFFIX(const wchar_t *str, std::size_t) ENTT_NOEXCEPT {
+[[nodiscard]] constexpr entt::hashed_wstring operator"" _hws(const wchar_t *str, std::size_t) ENTT_NOEXCEPT {
     return entt::hashed_wstring{str};
+}
+
+
+}
+
+
 }
 
 

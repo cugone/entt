@@ -1,26 +1,29 @@
 * long term feature: shared_ptr less locator and resource cache
-* custom allocators and EnTT allocator-aware in general (long term feature, I don't actually need it at the moment) - see #22
 * debugging tools (#60): the issue online already contains interesting tips on this, look at it
 * work stealing job system (see #100) + mt scheduler based on const awareness for types
-* meta: sort of meta view based on meta stuff to iterate entities, void * and meta info objects (remove runtime views, welcome reflection)
-* allow to replace std:: with custom implementations
-* custom (decoupled) pools ==> N-buffering, shared components, multi-model, hibitsets, and so on
 * add examples (and credits) from @alanjfs :)
-* static reflection, hint: template<> meta_type_t<Type>: meta_descriptor<name, func..., props..., etc...> (see #342)
-* update documentation for meta, it contains less than half of the actual feature
 
-Next:
-* make it easier to hook into the type system and describe how to do that to eg auto-generate meta types on first use
-* review multi component views to reduce instantiations once empty types are gone...
-* add observer functions aside observer class
+WIP:
+* fast-contains for sparse sets (low prio but nice-to-have)
+* runtime components (registry), runtime events (dispatcher/emitter), runtime context variables ...
+* runtime_view/registry, remove reference to basic_sparse_set<E>
+* make pools available (registry/view/group), review operator| for views, make views accept registry to ctor
+* make view.lead() or similar available to return leading pool (useful for mt)
+* dedicated entity storage, in-place O(1) release/destroy for non-orphaned entities, out-of-sync model
+* custom allocators all over
 
-* WIP:
- - introduce the component iterators for non-contiguous collections of entities (multi component views, observers, user defined collections)
-
-* WIP: snapshot rework
- - snapshot: support for range-based archives
- - update documentation to describe alternatives
-
-* WIP:
- - custom pools.
- - the Perfect Model.
+WIP:
+* customizable any_vtable, sfinae-friendly definition and op::custom for user-def
+* registry: fake vtable (mixin injected) to get rid of poly storage, use pointer to sparse set only for pools, discard pool_data type.
+* general purpose paged vector container
+* resource, forward the id to the loader from the cache and if constexpr the call to load, update doc and describe customization points
+* make it possible to create views of the type `view<T, T>`, add get by index and such, allow to register custom pools by name with the registry
+* add user data to type_info
+* make const registry::view thread safe, switch to a view<T...>{registry} model (long term goal)
+* headless (sparse set only) view
+* write documentation for custom storages and views!!
+* make runtime views use opaque storage and therefore return also elements.
+* add exclude-only views to combine with packs
+* entity-aware observer, add observer functions aside observer class
+* deprecate non-owning groups in favor of owning views and view packs, introduce lazy owning views
+* snapshot: support for range-based archives

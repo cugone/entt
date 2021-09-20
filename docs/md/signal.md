@@ -149,7 +149,7 @@ If they are not, the first argument of the function type must be that of the
 class on which the members operate and an instance of this class must obviously
 be passed when invoking the delegate:
 
-```
+```cpp
 entt::delegate<void(my_struct &, int)> delegate;
 delegate.connect<&my_struct::f>();
 
@@ -387,9 +387,9 @@ entt::dispatcher dispatcher{};
 ```
 
 In order to register an instance of a class to a dispatcher, its type must
-expose one or more member functions the arguments of which are such that
-`const E &` can be converted to them for each type of event `E`, no matter what
-the return value is.<br/>
+expose one or more member functions the arguments of which are such that `E &`
+can be converted to them for each type of event `E`, no matter what the return
+value is.<br/>
 The name of the member function aimed to receive the event must be provided to
 the `connect` member function of the sink in charge for the specific event:
 
@@ -477,9 +477,9 @@ The full list of accepted types of events isn't required. Handlers are created
 internally on the fly and thus each type of event is accepted by default.
 
 Whenever an event is published, an emitter provides the listeners with a
-reference to itself along with a const reference to the event. Therefore
-listeners have an handy way to work with it without incurring in the need of
-capturing a reference to the emitter itself.<br/>
+reference to itself along with a reference to the event. Therefore listeners
+have an handy way to work with it without incurring in the need of capturing a
+reference to the emitter itself.<br/>
 In addition, an opaque object is returned each time a connection is established
 between an emitter and a listener, allowing the caller to disconnect them at a
 later time.<br/>
@@ -493,10 +493,10 @@ my_emitter emitter{};
 ```
 
 Listeners must be movable and callable objects (free functions, lambdas,
-functors, `std::function`s, whatever) whose function type is:
+functors, `std::function`s, whatever) whose function type is compatible with:
 
 ```cpp
-void(const Event &, my_emitter &)
+void(Event &, my_emitter &)
 ```
 
 Where `Event` is the type of event they want to listen.<br/>

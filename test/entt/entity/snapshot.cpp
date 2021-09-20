@@ -144,7 +144,7 @@ TEST(Snapshot, Dump) {
     ASSERT_EQ(registry.current(e1), v1);
     ASSERT_EQ(registry.get<int>(e2), 3);
     ASSERT_EQ(registry.get<char>(e3), '0');
-    ASSERT_TRUE(registry.has<a_component>(e3));
+    ASSERT_TRUE(registry.all_of<a_component>(e3));
 
     ASSERT_TRUE(registry.empty<another_component>());
 }
@@ -199,7 +199,7 @@ TEST(Snapshot, Partial) {
 
     ASSERT_EQ(registry.get<int>(e0), 42);
     ASSERT_EQ(registry.get<char>(e0), 'c');
-    ASSERT_FALSE(registry.has<double>(e0));
+    ASSERT_FALSE(registry.all_of<double>(e0));
     ASSERT_EQ(registry.current(e1), v1);
     ASSERT_EQ(registry.get<int>(e2), 3);
     ASSERT_EQ(registry.get<char>(e3), '0');
@@ -256,7 +256,7 @@ TEST(Snapshot, Iterator) {
     ASSERT_EQ(registry.view<another_component>().size(), size);
 
     registry.view<another_component>().each([](const auto entity, const auto &) {
-        ASSERT_TRUE(entt::to_integral(entity) % 2);
+        ASSERT_NE(entt::to_integral(entity) % 2u, 0u);
     });
 }
 
@@ -286,7 +286,7 @@ TEST(Snapshot, Continuous) {
     input_archive<storage_type> input{storage};
 
     for(int i = 0; i < 10; ++i) {
-        src.create();
+        static_cast<void>(src.create());
     }
 
     src.clear();
@@ -342,7 +342,7 @@ TEST(Snapshot, Continuous) {
     decltype(dst.size()) noncopyable_component_cnt{};
 
     dst.each([&dst, &a_component_cnt](auto entt) {
-        ASSERT_TRUE(dst.has<a_component>(entt));
+        ASSERT_TRUE(dst.all_of<a_component>(entt));
         ++a_component_cnt;
     });
 
@@ -380,7 +380,7 @@ TEST(Snapshot, Continuous) {
 
     dst.view<noncopyable_component>().each([&dst, &noncopyable_component_cnt](auto, const auto &component) {
         ++noncopyable_component_cnt;
-        ASSERT_EQ(component.value, (dst.size<noncopyable_component>() - noncopyable_component_cnt - 1));
+        ASSERT_EQ(component.value, static_cast<int>(dst.size<noncopyable_component>() - noncopyable_component_cnt - 1u));
     });
 
     src.view<another_component>().each([](auto, auto &component) {
@@ -549,8 +549,8 @@ TEST(Snapshot, SyncDataMembers) {
     output_archive<storage_type> output{storage};
     input_archive<storage_type> input{storage};
 
-    src.create();
-    src.create();
+    static_cast<void>(src.create());
+    static_cast<void>(src.create());
 
     src.clear();
 
@@ -582,8 +582,8 @@ TEST(Snapshot, SyncDataMembers) {
     ASSERT_FALSE(dst.valid(parent));
     ASSERT_FALSE(dst.valid(child));
 
-    ASSERT_TRUE(dst.has<what_a_component>(loader.map(parent)));
-    ASSERT_TRUE(dst.has<what_a_component>(loader.map(child)));
+    ASSERT_TRUE(dst.all_of<what_a_component>(loader.map(parent)));
+    ASSERT_TRUE(dst.all_of<what_a_component>(loader.map(child)));
 
     ASSERT_EQ(dst.get<what_a_component>(loader.map(parent)).bar, static_cast<entt::entity>(entt::null));
 

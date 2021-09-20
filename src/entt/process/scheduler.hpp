@@ -57,9 +57,7 @@ class scheduler {
     struct continuation {
         continuation(process_handler *ref)
             : handler{ref}
-        {
-            ENTT_ASSERT(handler);
-        }
+        {}
 
         template<typename Proc, typename... Args>
         continuation then(Args &&... args) {
@@ -84,19 +82,19 @@ class scheduler {
         auto *process = static_cast<Proc *>(handler.instance.get());
         process->tick(delta, data);
 
-        auto dead = process->dead();
-
-        if(dead) {
-            if(handler.next && !process->rejected()) {
+        if(process->rejected()) {
+            return true;
+        } else if(process->finished()) {
+            if(handler.next) {
                 handler = std::move(*handler.next);
                 // forces the process to exit the uninitialized state
-                dead = handler.update(handler, {}, nullptr);
-            } else {
-                handler.instance.reset();
+                return handler.update(handler, {}, nullptr);
             }
+
+            return true;
         }
 
-        return dead;
+        return false;
     }
 
     template<typename Proc>
@@ -252,19 +250,17 @@ public:
      * @param data Optional data.
      */
     void update(const Delta delta, void *data = nullptr) {
-        bool clean = false;
+        auto sz = handlers.size();
 
         for(auto pos = handlers.size(); pos; --pos) {
             auto &handler = handlers[pos-1];
-            const bool dead = handler.update(handler, delta, data);
-            clean = clean || dead;
+
+            if(const auto dead = handler.update(handler, delta, data); dead) {
+                std::swap(handler, handlers[--sz]);
+            }
         }
 
-        if(clean) {
-            handlers.erase(std::remove_if(handlers.begin(), handlers.end(), [](auto &handler) {
-                return !handler.instance;
-            }), handlers.end());
-        }
+        handlers.erase(handlers.begin() + sz, handlers.end());
     }
 
     /**

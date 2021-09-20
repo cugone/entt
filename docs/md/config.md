@@ -7,13 +7,13 @@
 
 * [Introduction](#introduction)
 * [Definitions](#definitions)
-  * [ENTT_STANDALONE](#entt_standalone)
-  * [ENTT_NOEXCEPT](#entt_noexcept)
-  * [ENTT_HS_SUFFIX and ENTT_HWS_SUFFIX](#entt_hs_suffix_and_entt_hws_suffix)
+  * [ENTT_NOEXCEPTION](#entt_noexcept)
   * [ENTT_USE_ATOMIC](#entt_use_atomic)
   * [ENTT_ID_TYPE](#entt_id_type)
-  * [ENTT_PAGE_SIZE](#entt_page_size)
+  * [ENTT_SPARSE_PAGE](#entt_sparse_page)
+  * [ENTT_PACKED_PAGE](#entt_packed_page)
   * [ENTT_ASSERT](#entt_assert)
+    * [ENTT_DISABLE_ASSERT](#entt_disable_assert)
   * [ENTT_NO_ETO](#entt_no_eto)
   * [ENTT_STANDARD_CPP](#entt_standard_cpp)
 
@@ -38,26 +38,11 @@ Each parameter can result in internal library definitions. It's not recommended
 to try to also modify these definitions, since there is no guarantee that they
 will remain stable over time unlike the options below.
 
-## ENTT_STANDALONE
+## ENTT_NOEXCEPTION
 
-`EnTT` is designed in such a way that it works (almost) everywhere out of the
-box. However, this is the result of many refinements over time and a compromise
-regarding some optimizations.<br/>
-It's worth noting that users can get a small performance boost by passing this
-definition to the compiler when the library is used in a standalone application.
-
-## ENTT_NOEXCEPT
-
-The purpose of this parameter is to suppress the use of `noexcept` by this
-library.<br/>
-To do this, simply define the variable without assigning any value to it.
-
-## ENTT_HS_SUFFIX and ENTT_HWS_SUFFIX
-
-The `hashed_string` class introduces the `_hs` and `_hws` suffixes to accompany
-its user defined literals.<br/>
-In the case of conflicts or even just to change these suffixes, it's possible to
-do so by associating new ones with these definitions.
+This parameter can be used to switch off exception handling in `EnTT`.<br/>
+To do this, simply define the variable without assigning any value to it. This
+is roughly equivalent to setting the compiler flag `-ff-noexceptions`.
 
 ## ENTT_USE_ATOMIC
 
@@ -75,35 +60,52 @@ the library.<br/>
 By default, its type is `std::uint32_t`. However, users can define a different
 default type if necessary.
 
-## ENTT_PAGE_SIZE
+## ENTT_SPARSE_PAGE
 
-As is known, the ECS module of `EnTT` is based on _sparse sets_. What is less
-known perhaps is that these are paged to reduce memory consumption in some
-corner cases.<br/>
-The default size of a page is 32kB but users can adjust it if appropriate. In
-all case, the chosen value **must** be a power of 2.
+It's known that the ECS module of `EnTT` is based on _sparse sets_. What is less
+known perhaps is that the sparse arrays are paged to reduce memory usage.<br/>
+Default size of pages (that is, the number of elements they contain) is 4096 but
+users can adjust it if appropriate. In all case, the chosen value **must** be a
+power of 2.
+
+## ENTT_PACKED_PAGE
+
+Similar to sparse arrays, packed arrays of components are paginated as well. In
+However, int this case the aim isn't to reduce memory usage but to have pointer
+stability upon component creation.<br/>
+Default size of pages (that is, the number of elements they contain) is 1024 but
+users can adjust it if appropriate. In all case, the chosen value **must** be a
+power of 2.
 
 ## ENTT_ASSERT
 
 For performance reasons, `EnTT` doesn't use exceptions or any other control
 structures. In fact, it offers many features that result in undefined behavior
 if not used correctly.<br/>
-To get around this, the library relies on a lot of `assert`s for the purpose of
-detecting errors in debug builds. However, these assertions may in turn affect
-performance to an extent.<br/>
-This option is meant to disable all controls.
+To get around this, the library relies on a lot of asserts for the purpose of
+detecting errors in debug builds. By default, it uses `assert` internally, but
+users are allowed to overwrite its behavior by setting this variable.
+
+### ENTT_DISABLE_ASSERT
+
+Assertions may in turn affect performance to an extent when enabled. Whether
+`ENTT_ASSERT` is redefined or not, all asserts can be disabled at once by means
+of this definition.<br/>
+Note that `ENTT_DISABLE_ASSERT` takes precedence over the redefinition of
+`ENTT_ASSERT` and is therefore meant to disable all controls no matter what.
 
 ## ENTT_NO_ETO
 
 In order to reduce memory consumption and increase performance, empty types are
 never stored by the ECS module of `EnTT`.<br/>
-Use thi svariable to treat these types like all others and therefore to create a
+Use this variable to treat these types like all others and therefore to create a
 dedicated storage for them.
 
 ## ENTT_STANDARD_CPP
 
-After many adventures, `EnTT` finally works fine across boundaries.<br/>
-To do this, the library mixes some non-standard language features with others
-that are perfectly compliant.<br/>
+`EnTT` mixes non-standard language features with others that are perfectly
+compliant to offer some of its functionalities.<br/>
 This definition will prevent the library from using non-standard techniques,
-that is, functionalities that aren't fully compliant with the standard C++.
+that is, functionalities that aren't fully compliant with the standard C++.<br/>
+While there are no known portability issues at the time of this writing, this
+should make the library fully portable anyway if needed.

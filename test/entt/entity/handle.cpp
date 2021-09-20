@@ -1,6 +1,7 @@
 #include <type_traits>
 #include <utility>
 #include <gtest/gtest.h>
+#include <entt/entity/entity.hpp>
 #include <entt/entity/handle.hpp>
 #include <entt/entity/registry.hpp>
 
@@ -36,44 +37,145 @@ TEST(BasicHandle, Construction) {
 
     ASSERT_EQ(handle, chandle);
 
-    static_assert(std::is_same_v<entt::registry &, decltype(handle.registry())>);
-    static_assert(std::is_same_v<const entt::registry &, decltype(chandle.registry())>);
+    static_assert(std::is_same_v<entt::registry *, decltype(handle.registry())>);
+    static_assert(std::is_same_v<const entt::registry *, decltype(chandle.registry())>);
+}
 
-    handle = entt::null;
+TEST(BasicHandle, Invalidation) {
+    entt::handle handle;
 
-    ASSERT_TRUE(entt::null == handle.entity());
-    ASSERT_NE(entity, handle);
     ASSERT_FALSE(handle);
+    ASSERT_EQ(handle.registry(), nullptr);
+    ASSERT_EQ(handle.entity(), entt::entity{entt::null});
+
+    entt::registry registry;
+    const auto entity = registry.create();
+
+    handle = { registry, entity };
+
+    ASSERT_TRUE(handle);
+    ASSERT_NE(handle.registry(), nullptr);
+    ASSERT_NE(handle.entity(), entt::entity{entt::null});
+
+    handle = {};
+
+    ASSERT_FALSE(handle);
+    ASSERT_EQ(handle.registry(), nullptr);
+    ASSERT_EQ(handle.entity(), entt::entity{entt::null});
+}
+
+TEST(BasicHandle, Destruction) {
+    using traits_type = entt::entt_traits<entt::entity>;
+
+    entt::registry registry;
+    const auto entity = registry.create();
+    entt::handle handle{registry, entity};
+
+    ASSERT_TRUE(handle);
+    ASSERT_TRUE(handle.valid());
+    ASSERT_NE(handle.registry(), nullptr);
+    ASSERT_EQ(handle.entity(), entity);
+
+    handle.destroy(traits_type::to_version(entity));
+
+    ASSERT_FALSE(handle);
+    ASSERT_FALSE(handle.valid());
+    ASSERT_NE(handle.registry(), nullptr);
+    ASSERT_EQ(handle.entity(), entity);
+    ASSERT_EQ(registry.current(entity), typename entt::registry::version_type{});
+
+    handle = entt::handle{registry, registry.create()};
+
+    ASSERT_TRUE(handle);
+    ASSERT_TRUE(handle.valid());
+    ASSERT_NE(handle.registry(), nullptr);
+    ASSERT_EQ(handle.entity(), entity);
+
+    handle.destroy();
+
+    ASSERT_FALSE(handle);
+    ASSERT_FALSE(handle.valid());
+    ASSERT_NE(handle.registry(), nullptr);
+    ASSERT_EQ(handle.entity(), entity);
+    ASSERT_NE(registry.current(entity), typename entt::registry::version_type{});
+}
+
+TEST(BasicHandle, Comparison) {
+    entt::registry registry;
+    const auto entity = registry.create();
+
+    entt::handle handle{registry, entity};
+    entt::const_handle chandle = handle;
+
+    ASSERT_NE(handle, entt::handle{});
+    ASSERT_FALSE(handle == entt::handle{});
+    ASSERT_TRUE(handle != entt::handle{});
+
+    ASSERT_NE(chandle, entt::const_handle{});
+    ASSERT_FALSE(chandle == entt::const_handle{});
+    ASSERT_TRUE(chandle != entt::const_handle{});
+
+    ASSERT_EQ(handle, chandle);
+    ASSERT_TRUE(handle == chandle);
+    ASSERT_FALSE(handle != chandle);
+
+    ASSERT_EQ(entt::handle{}, entt::const_handle{});
+    ASSERT_TRUE(entt::handle{} == entt::const_handle{});
+    ASSERT_FALSE(entt::handle{} != entt::const_handle{});
+
+    handle = {};
+    chandle = {};
+
+    ASSERT_EQ(handle, entt::handle{});
+    ASSERT_TRUE(handle == entt::handle{});
+    ASSERT_FALSE(handle != entt::handle{});
+
+    ASSERT_EQ(chandle, entt::const_handle{});
+    ASSERT_TRUE(chandle == entt::const_handle{});
+    ASSERT_FALSE(chandle != entt::const_handle{});
+
+    entt::registry other;
+    const auto entt = other.create();
+
+    handle = { registry, entity };
+    chandle = { other, entt };
 
     ASSERT_NE(handle, chandle);
+    ASSERT_FALSE(chandle == handle);
+    ASSERT_TRUE(chandle != handle);
+    ASSERT_EQ(handle.entity(), chandle.entity());
+    ASSERT_NE(handle.registry(), chandle.registry());
 }
 
 TEST(BasicHandle, Component) {
     entt::registry registry;
     const auto entity = registry.create();
-    entt::handle handle{registry, entity};
+    entt::handle_view<int, char, double> handle{registry, entity};
 
     ASSERT_EQ(3, handle.emplace<int>(3));
     ASSERT_EQ('c', handle.emplace_or_replace<char>('c'));
+    ASSERT_EQ(.3, handle.emplace_or_replace<double>(.3));
 
     const auto &patched = handle.patch<int>([](auto &comp) { comp = 42; });
 
     ASSERT_EQ(42, patched);
     ASSERT_EQ('a', handle.replace<char>('a'));
-    ASSERT_TRUE((handle.has<int, char>()));
+    ASSERT_TRUE((handle.all_of<int, char, double>()));
+    ASSERT_EQ((std::make_tuple(42, 'a', .3)), (handle.get<int, char, double>()));
 
-    handle.remove<char>();
+    handle.erase<char, double>();
 
-    ASSERT_TRUE(registry.empty<char>());
-    ASSERT_EQ(0, handle.remove_if_exists<char>());
+    ASSERT_TRUE((registry.empty<char, double>()));
+    ASSERT_EQ(0u, (handle.remove<char, double>()));
 
-    handle.visit([](auto id) { ASSERT_EQ(entt::type_info<int>::id(), id); });
+    handle.visit([](auto info) { ASSERT_EQ(entt::type_id<int>(), info); });
 
-    ASSERT_TRUE((handle.any<int, char>()));
-    ASSERT_FALSE((handle.has<int, char>()));
+    ASSERT_TRUE((handle.any_of<int, char, double>()));
+    ASSERT_FALSE((handle.all_of<int, char, double>()));
     ASSERT_FALSE(handle.orphan());
 
-    handle.remove_all();
+    ASSERT_EQ(1u, (handle.remove<int>()));
+    ASSERT_DEATH(handle.erase<int>(), "");
 
     ASSERT_TRUE(registry.empty<int>());
     ASSERT_TRUE(handle.orphan());
@@ -84,6 +186,7 @@ TEST(BasicHandle, Component) {
 
     ASSERT_EQ(42, *handle.try_get<int>());
     ASSERT_EQ(nullptr, handle.try_get<char>());
+    ASSERT_EQ(nullptr, std::get<1>(handle.try_get<int, char, double>()));
 }
 
 TEST(BasicHandle, FromEntity) {
@@ -97,7 +200,7 @@ TEST(BasicHandle, FromEntity) {
 
     ASSERT_TRUE(handle);
     ASSERT_EQ(entity, handle.entity());
-    ASSERT_TRUE((handle.has<int, char>()));
+    ASSERT_TRUE((handle.all_of<int, char>()));
     ASSERT_EQ(handle.get<int>(), 42);
     ASSERT_EQ(handle.get<char>(), 'c');
 }
@@ -125,9 +228,13 @@ TEST(BasicHandle, ImplicitConversions) {
     entt::registry registry;
     const entt::handle handle{registry, registry.create()};
     const entt::const_handle chandle = handle;
+    const entt::handle_view<int, char> vhandle = handle;
+    const entt::const_handle_view<int> cvhandle = vhandle;
 
     handle.emplace<int>(42);
 
     ASSERT_EQ(handle.get<int>(), chandle.get<int>());
-    ASSERT_EQ(chandle.get<int>(), 42);
+    ASSERT_EQ(chandle.get<int>(), vhandle.get<int>());
+    ASSERT_EQ(vhandle.get<int>(), cvhandle.get<int>());
+    ASSERT_EQ(cvhandle.get<int>(), 42);
 }

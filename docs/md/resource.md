@@ -23,7 +23,7 @@ loading, and so on.
 `EnTT` doesn't pretend to offer a _one-fits-all_ solution for the different
 cases. Instead, it offers a minimal and perhaps trivial cache that can be useful
 most of the time during prototyping and sometimes even in a production
-environment.<br/>
+environments.<br/>
 For those interested in the subject, the plan is to improve it considerably over
 time in terms of performance, memory usage and functionalities. Hoping to make
 it, of course, one step at a time.
@@ -126,7 +126,7 @@ identifier and the parameters used to construct the resource as arguments:
 // uses the identifier declared above
 cache.load<my_loader>(identifier, 0);
 
-// uses a const char * directly as an identifier
+// uses a hashed string directly
 cache.load<my_loader>("another/identifier"_hs, 42);
 ```
 

@@ -7,7 +7,7 @@ include(FetchContent)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-if(FIND_GTEST_PACKAGE)
+if(ENTT_FIND_GTEST_PACKAGE)
     find_package(GTest REQUIRED)
 else()
     FetchContent_Declare(
@@ -38,25 +38,35 @@ add_compile_options($<TARGET_PROPERTY:EnTT,INTERFACE_COMPILE_OPTIONS>)
 
 function(SETUP_TARGET TARGET_NAME)
     set_target_properties(${TARGET_NAME} PROPERTIES CXX_EXTENSIONS OFF)
+    target_compile_features(${TARGET_NAME} PRIVATE ${ENTT_CXX_STD})
     target_link_libraries(${TARGET_NAME} PRIVATE EnTT)
 
-    target_compile_options(
+    if(MSVC)
+        target_compile_options(
+            ${TARGET_NAME}
+            PRIVATE
+                /EHsc /W1 /wd4996 /w14800
+                $<$<CONFIG:Debug>:/Od>
+                $<$<CONFIG:Release>:/O2>
+        )
+    else()
+        target_compile_options(
+            ${TARGET_NAME}
+            PRIVATE
+                -pedantic -fvisibility=hidden -Wall -Wshadow -Wno-deprecated-declarations
+                $<$<CONFIG:Debug>:-O0 -g>
+                $<$<CONFIG:Release>:-O2>
+        )
+    endif()
+
+    target_compile_definitions(
         ${TARGET_NAME}
         PRIVATE
-            $<$<NOT:$<PLATFORM_ID:Windows>>:-pedantic -fvisibility=hidden -Wall -Wshadow -Wno-deprecated-declarations>
-            $<$<PLATFORM_ID:Windows>:/EHsc /W1 /wd4996 /w14800>
+            ENTT_ID_TYPE=${ENTT_ID_TYPE}
+            _ENABLE_EXTENDED_ALIGNED_STORAGE
+            NOMINMAX
+            ${ARGN}
     )
-
-    target_compile_options(
-        ${TARGET_NAME}
-        PRIVATE
-            $<$<AND:$<CONFIG:Debug>,$<NOT:$<PLATFORM_ID:Windows>>>:-O0 -g>
-            $<$<AND:$<CONFIG:Release>,$<NOT:$<PLATFORM_ID:Windows>>>:-O2>
-            $<$<AND:$<CONFIG:Debug>,$<PLATFORM_ID:Windows>>:/Od>
-            $<$<AND:$<CONFIG:Release>,$<PLATFORM_ID:Windows>>:/O2>
-    )
-
-    target_compile_definitions(${TARGET_NAME} PRIVATE ENTT_STANDALONE ${ARGN})
 endfunction()
 
 add_library(odr OBJECT odr.cpp)
@@ -78,8 +88,8 @@ endfunction()
 
 function(SETUP_PLUGIN_TEST TEST_NAME)
     add_library(_${TEST_NAME} MODULE $<TARGET_OBJECTS:odr> lib/${TEST_NAME}/plugin.cpp)
-    SETUP_TARGET(_${TEST_NAME} NOMINMAX ${ARGVN})
-    SETUP_BASIC_TEST(lib_${TEST_NAME} lib/${TEST_NAME}/main.cpp NOMINMAX PLUGIN="$<TARGET_FILE:_${TEST_NAME}>" ${ARGVN})
+    SETUP_TARGET(_${TEST_NAME} ${ARGVN})
+    SETUP_BASIC_TEST(lib_${TEST_NAME} lib/${TEST_NAME}/main.cpp PLUGIN="$<TARGET_FILE:_${TEST_NAME}>" ${ARGVN})
     target_include_directories(_${TEST_NAME} PRIVATE ${cr_INCLUDE_DIR})
     target_include_directories(lib_${TEST_NAME} PRIVATE ${cr_INCLUDE_DIR})
     target_link_libraries(lib_${TEST_NAME} PRIVATE ${CMAKE_DL_LIBS})
@@ -87,19 +97,20 @@ endfunction()
 
 # Test benchmark
 
-if(BUILD_BENCHMARK)
+if(ENTT_BUILD_BENCHMARK)
     SETUP_BASIC_TEST(benchmark benchmark/benchmark.cpp)
 endif()
 
 # Test example
 
-if(BUILD_EXAMPLE)
+if(ENTT_BUILD_EXAMPLE)
     SETUP_BASIC_TEST(custom_identifier example/custom_identifier.cpp)
+    SETUP_BASIC_TEST(signal_less example/signal_less.cpp)
 endif()
 
 # Test lib
 
-if(BUILD_LIB)
+if(ENTT_BUILD_LIB)
     FetchContent_Declare(
         cr
         GIT_REPOSITORY https://github.com/fungos/cr.git
@@ -129,7 +140,7 @@ endif()
 
 # Test snapshot
 
-if(BUILD_SNAPSHOT)
+if(ENTT_BUILD_SNAPSHOT)
     FetchContent_Declare(
         cereal
         GIT_REPOSITORY https://github.com/USCiLab/cereal.git
@@ -151,25 +162,32 @@ endif()
 # Test core
 
 SETUP_BASIC_TEST(algorithm entt/core/algorithm.cpp)
+SETUP_BASIC_TEST(any entt/core/any.cpp)
+SETUP_BASIC_TEST(compressed_pair entt/core/compressed_pair.cpp)
+SETUP_BASIC_TEST(enum entt/core/enum.cpp)
 SETUP_BASIC_TEST(family entt/core/family.cpp)
 SETUP_BASIC_TEST(hashed_string entt/core/hashed_string.cpp)
 SETUP_BASIC_TEST(ident entt/core/ident.cpp)
+SETUP_BASIC_TEST(memory entt/core/memory.cpp)
 SETUP_BASIC_TEST(monostate entt/core/monostate.cpp)
+SETUP_BASIC_TEST(tuple entt/core/tuple.cpp)
 SETUP_BASIC_TEST(type_info entt/core/type_info.cpp)
 SETUP_BASIC_TEST(type_traits entt/core/type_traits.cpp)
 SETUP_BASIC_TEST(utility entt/core/utility.cpp)
 
 # Test entity
 
-SETUP_BASIC_TEST(actor entt/entity/actor.cpp)
 SETUP_BASIC_TEST(entity entt/entity/entity.cpp)
 SETUP_BASIC_TEST(group entt/entity/group.cpp)
 SETUP_BASIC_TEST(handle entt/entity/handle.cpp)
 SETUP_BASIC_TEST(helper entt/entity/helper.cpp)
 SETUP_BASIC_TEST(observer entt/entity/observer.cpp)
+SETUP_BASIC_TEST(poly_storage entt/entity/poly_storage.cpp)
+SETUP_BASIC_TEST(organizer entt/entity/organizer.cpp)
 SETUP_BASIC_TEST(registry entt/entity/registry.cpp)
 SETUP_BASIC_TEST(registry_no_eto entt/entity/registry_no_eto.cpp ENTT_NO_ETO)
 SETUP_BASIC_TEST(runtime_view entt/entity/runtime_view.cpp)
+SETUP_BASIC_TEST(sigh_storage_mixin entt/entity/sigh_storage_mixin.cpp)
 SETUP_BASIC_TEST(snapshot entt/entity/snapshot.cpp)
 SETUP_BASIC_TEST(sparse_set entt/entity/sparse_set.cpp)
 SETUP_BASIC_TEST(storage entt/entity/storage.cpp)
@@ -187,11 +205,19 @@ SETUP_BASIC_TEST(meta_container entt/meta/meta_container.cpp)
 SETUP_BASIC_TEST(meta_conv entt/meta/meta_conv.cpp)
 SETUP_BASIC_TEST(meta_ctor entt/meta/meta_ctor.cpp)
 SETUP_BASIC_TEST(meta_data entt/meta/meta_data.cpp)
+SETUP_BASIC_TEST(meta_dtor entt/meta/meta_dtor.cpp)
 SETUP_BASIC_TEST(meta_func entt/meta/meta_func.cpp)
+SETUP_BASIC_TEST(meta_handle entt/meta/meta_handle.cpp)
 SETUP_BASIC_TEST(meta_pointer entt/meta/meta_pointer.cpp)
 SETUP_BASIC_TEST(meta_prop entt/meta/meta_prop.cpp)
 SETUP_BASIC_TEST(meta_range entt/meta/meta_range.cpp)
+SETUP_BASIC_TEST(meta_template entt/meta/meta_template.cpp)
 SETUP_BASIC_TEST(meta_type entt/meta/meta_type.cpp)
+
+# Test poly
+
+SETUP_BASIC_TEST(poly_deduced entt/poly/poly_deduced.cpp)
+SETUP_BASIC_TEST(poly_defined entt/poly/poly_defined.cpp)
 
 # Test process
 

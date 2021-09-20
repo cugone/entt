@@ -12,13 +12,16 @@ struct position {
     std::uint64_t y;
 };
 
-struct velocity {
-    std::uint64_t x;
-    std::uint64_t y;
-};
+struct velocity: position {};
+struct stable_position: position {};
 
 template<std::size_t>
 struct comp { int x; };
+
+template<>
+struct entt::component_traits<stable_position>: basic_component_traits {
+    using in_place_delete = std::true_type;
+};
 
 struct timer final {
     timer(): start{std::chrono::system_clock::now()} {}
@@ -45,9 +48,9 @@ void pathological(Func func) {
 
     for(auto i = 0; i < 10; ++i) {
         registry.each([i = 0, &registry](const auto entity) mutable {
-            if(!(++i % 7)) { registry.remove_if_exists<position>(entity); }
-            if(!(++i % 11)) { registry.remove_if_exists<velocity>(entity); }
-            if(!(++i % 13)) { registry.remove_if_exists<comp<0>>(entity); }
+            if(!(++i % 7)) { registry.remove<position>(entity); }
+            if(!(++i % 11)) { registry.remove<velocity>(entity); }
+            if(!(++i % 13)) { registry.remove<comp<0>>(entity); }
             if(!(++i % 17)) { registry.destroy(entity); }
         });
 
@@ -72,7 +75,7 @@ TEST(Benchmark, Create) {
     timer timer;
 
     for(std::uint64_t i = 0; i < 1000000L; i++) {
-        registry.create();
+        static_cast<void>(registry.create());
     }
 
     timer.elapsed();
@@ -120,21 +123,168 @@ TEST(Benchmark, CreateManyWithComponents) {
     timer.elapsed();
 }
 
-TEST(Benchmark, Destroy) {
+TEST(Benchmark, Erase) {
     entt::registry registry;
+    std::vector<entt::entity> entities(1000000);
 
-    std::cout << "Destroying 1000000 entities" << std::endl;
+    std::cout << "Erasing 1000000 components from their entities" << std::endl;
 
-    for(std::uint64_t i = 0; i < 1000000L; i++) {
-        registry.create();
-    }
+    registry.create(entities.begin(), entities.end());
+    registry.insert<int>(entities.begin(), entities.end());
 
     timer timer;
+
+    for(auto entity: registry.view<int>()) {
+        registry.erase<int>(entity);
+    }
+
+    timer.elapsed();
+}
+
+TEST(Benchmark, EraseMany) {
+    entt::registry registry;
+    std::vector<entt::entity> entities(1000000);
+
+    std::cout << "Erasing 1000000 components from their entities at once" << std::endl;
+
+    registry.create(entities.begin(), entities.end());
+    registry.insert<int>(entities.begin(), entities.end());
+
+    timer timer;
+    auto view = registry.view<int>();
+    registry.erase<int>(view.begin(), view.end());
+    timer.elapsed();
+}
+
+TEST(Benchmark, Remove) {
+    entt::registry registry;
+    std::vector<entt::entity> entities(1000000);
+
+    std::cout << "Removing 1000000 components from their entities" << std::endl;
+
+    registry.create(entities.begin(), entities.end());
+    registry.insert<int>(entities.begin(), entities.end());
+
+    timer timer;
+
+    for(auto entity: registry.view<int>()) {
+        registry.remove<int>(entity);
+    }
+
+    timer.elapsed();
+}
+
+TEST(Benchmark, RemoveMany) {
+    entt::registry registry;
+    std::vector<entt::entity> entities(1000000);
+
+    std::cout << "Removing 1000000 components from their entities at once" << std::endl;
+
+    registry.create(entities.begin(), entities.end());
+    registry.insert<int>(entities.begin(), entities.end());
+
+    timer timer;
+    auto view = registry.view<int>();
+    registry.remove<int>(view.begin(), view.end());
+    timer.elapsed();
+}
+
+TEST(Benchmark, Clear) {
+    entt::registry registry;
+    std::vector<entt::entity> entities(1000000);
+
+    std::cout << "Clearing 1000000 components from their entities" << std::endl;
+
+    registry.create(entities.begin(), entities.end());
+    registry.insert<int>(entities.begin(), entities.end());
+
+    timer timer;
+    registry.clear<int>();
+    timer.elapsed();
+}
+
+TEST(Benchmark, Recycle) {
+    entt::registry registry;
+    std::vector<entt::entity> entities(1000000);
+
+    std::cout << "Recycling 1000000 entities" << std::endl;
+
+    registry.create(entities.begin(), entities.end());
 
     registry.each([&registry](auto entity) {
         registry.destroy(entity);
     });
 
+    timer timer;
+
+    for(auto next = entities.size(); next; --next) {
+        static_cast<void>(registry.create());
+    }
+
+    timer.elapsed();
+}
+
+TEST(Benchmark, RecycleMany) {
+    entt::registry registry;
+    std::vector<entt::entity> entities(1000000);
+
+    std::cout << "Recycling 1000000 entities" << std::endl;
+
+    registry.create(entities.begin(), entities.end());
+
+    registry.each([&registry](auto entity) {
+        registry.destroy(entity);
+    });
+
+    timer timer;
+    registry.create(entities.begin(), entities.end());
+    timer.elapsed();
+}
+
+TEST(Benchmark, Destroy) {
+    entt::registry registry;
+    std::vector<entt::entity> entities(1000000);
+
+    std::cout << "Destroying 1000000 entities" << std::endl;
+
+    registry.create(entities.begin(), entities.end());
+    registry.insert<int>(entities.begin(), entities.end());
+
+    timer timer;
+
+    for(auto entity: registry.view<int>()) {
+        registry.destroy(entity);
+    }
+
+    timer.elapsed();
+}
+
+TEST(Benchmark, DestroyMany) {
+    entt::registry registry;
+    std::vector<entt::entity> entities(1000000);
+
+    std::cout << "Destroying 1000000 entities at once" << std::endl;
+
+    registry.create(entities.begin(), entities.end());
+    registry.insert<int>(entities.begin(), entities.end());
+
+    timer timer;
+    auto view = registry.view<int>();
+    registry.destroy(view.begin(), view.end());
+    timer.elapsed();
+}
+
+TEST(Benchmark, DestroyManyFastPath) {
+    entt::registry registry;
+    std::vector<entt::entity> entities(1000000);
+
+    std::cout << "Destroying 1000000 entities at once, fast path" << std::endl;
+
+    registry.create(entities.begin(), entities.end());
+    registry.insert<int>(entities.begin(), entities.end());
+
+    timer timer;
+    registry.destroy(entities.begin(), entities.end());
     timer.elapsed();
 }
 
@@ -159,6 +309,27 @@ TEST(Benchmark, IterateSingleComponent1M) {
     });
 }
 
+TEST(Benchmark, IterateSingleComponentTombstonePolicy1M) {
+    entt::registry registry;
+
+    std::cout << "Iterating over 1000000 entities, one component, tombstone policy" << std::endl;
+
+    for(std::uint64_t i = 0; i < 1000000L; i++) {
+        const auto entity = registry.create();
+        registry.emplace<stable_position>(entity);
+    }
+
+    auto test = [&](auto func) {
+        timer timer;
+        registry.view<stable_position>().each(func);
+        timer.elapsed();
+    };
+
+    test([](auto &... comp) {
+        ((comp.x = {}), ...);
+    });
+}
+
 TEST(Benchmark, IterateSingleComponentRuntime1M) {
     entt::registry registry;
 
@@ -170,7 +341,7 @@ TEST(Benchmark, IterateSingleComponentRuntime1M) {
     }
 
     auto test = [&](auto func) {
-        entt::id_type types[] = { entt::type_info<position>::id() };
+        entt::id_type types[] = { entt::type_hash<position>::value() };
 
         timer timer;
         registry.runtime_view(std::begin(types), std::end(types)).each(func);
@@ -196,6 +367,28 @@ TEST(Benchmark, IterateTwoComponents1M) {
     auto test = [&](auto func) {
         timer timer;
         registry.view<position, velocity>().each(func);
+        timer.elapsed();
+    };
+
+    test([](auto &... comp) {
+        ((comp.x = {}), ...);
+    });
+}
+
+TEST(Benchmark, IterateTombstonePolicyTwoComponentsTombstonePolicy1M) {
+    entt::registry registry;
+
+    std::cout << "Iterating over 1000000 entities, two components, tombstone policy" << std::endl;
+
+    for(std::uint64_t i = 0; i < 1000000L; i++) {
+        const auto entity = registry.create();
+        registry.emplace<stable_position>(entity);
+        registry.emplace<velocity>(entity);
+    }
+
+    auto test = [&](auto func) {
+        timer timer;
+        registry.view<stable_position, velocity>().each(func);
         timer.elapsed();
     };
 
@@ -336,8 +529,8 @@ TEST(Benchmark, IterateTwoComponentsRuntime1M) {
 
     auto test = [&](auto func) {
         entt::id_type types[] = {
-            entt::type_info<position>::id(),
-            entt::type_info<velocity>::id()
+            entt::type_hash<position>::value(),
+            entt::type_hash<velocity>::value()
         };
 
         timer timer;
@@ -367,8 +560,8 @@ TEST(Benchmark, IterateTwoComponentsRuntime1MHalf) {
 
     auto test = [&](auto func) {
         entt::id_type types[] = {
-            entt::type_info<position>::id(),
-            entt::type_info<velocity>::id()
+            entt::type_hash<position>::value(),
+            entt::type_hash<velocity>::value()
         };
 
         timer timer;
@@ -398,8 +591,8 @@ TEST(Benchmark, IterateTwoComponentsRuntime1MOne) {
 
     auto test = [&](auto func) {
         entt::id_type types[] = {
-            entt::type_info<position>::id(),
-            entt::type_info<velocity>::id()
+            entt::type_hash<position>::value(),
+            entt::type_hash<velocity>::value()
         };
 
         timer timer;
@@ -428,6 +621,29 @@ TEST(Benchmark, IterateThreeComponents1M) {
     auto test = [&](auto func) {
         timer timer;
         registry.view<position, velocity, comp<0>>().each(func);
+        timer.elapsed();
+    };
+
+    test([](auto &... comp) {
+        ((comp.x = {}), ...);
+    });
+}
+
+TEST(Benchmark, IterateThreeComponentsTombstonePolicy1M) {
+    entt::registry registry;
+
+    std::cout << "Iterating over 1000000 entities, three components, tombstone policy" << std::endl;
+
+    for(std::uint64_t i = 0; i < 1000000L; i++) {
+        const auto entity = registry.create();
+        registry.emplace<stable_position>(entity);
+        registry.emplace<velocity>(entity);
+        registry.emplace<comp<0>>(entity);
+    }
+
+    auto test = [&](auto func) {
+        timer timer;
+        registry.view<stable_position, velocity, comp<0>>().each(func);
         timer.elapsed();
     };
 
@@ -574,9 +790,9 @@ TEST(Benchmark, IterateThreeComponentsRuntime1M) {
 
     auto test = [&](auto func) {
         entt::id_type types[] = {
-            entt::type_info<position>::id(),
-            entt::type_info<velocity>::id(),
-            entt::type_info<comp<0>>::id()
+            entt::type_hash<position>::value(),
+            entt::type_hash<velocity>::value(),
+            entt::type_hash<comp<0>>::value()
         };
 
         timer timer;
@@ -608,9 +824,9 @@ TEST(Benchmark, IterateThreeComponentsRuntime1MHalf) {
 
     auto test = [&](auto func) {
         entt::id_type types[] = {
-            entt::type_info<position>::id(),
-            entt::type_info<velocity>::id(),
-            entt::type_info<comp<0>>::id()
+            entt::type_hash<position>::value(),
+            entt::type_hash<velocity>::value(),
+            entt::type_hash<comp<0>>::value()
         };
 
         timer timer;
@@ -642,9 +858,9 @@ TEST(Benchmark, IterateThreeComponentsRuntime1MOne) {
 
     auto test = [&](auto func) {
         entt::id_type types[] = {
-            entt::type_info<position>::id(),
-            entt::type_info<velocity>::id(),
-            entt::type_info<comp<0>>::id()
+            entt::type_hash<position>::value(),
+            entt::type_hash<velocity>::value(),
+            entt::type_hash<comp<0>>::value()
         };
 
         timer timer;
@@ -676,6 +892,31 @@ TEST(Benchmark, IterateFiveComponents1M) {
     auto test = [&](auto func) {
         timer timer;
         registry.view<position, velocity, comp<0>, comp<1>, comp<2>>().each(func);
+        timer.elapsed();
+    };
+
+    test([](auto &... comp) {
+        ((comp.x = {}), ...);
+    });
+}
+
+TEST(Benchmark, IterateFiveComponentsTombstonePolicy1M) {
+    entt::registry registry;
+
+    std::cout << "Iterating over 1000000 entities, five components, tombstone policy" << std::endl;
+
+    for(std::uint64_t i = 0; i < 1000000L; i++) {
+        const auto entity = registry.create();
+        registry.emplace<stable_position>(entity);
+        registry.emplace<velocity>(entity);
+        registry.emplace<comp<0>>(entity);
+        registry.emplace<comp<1>>(entity);
+        registry.emplace<comp<2>>(entity);
+    }
+
+    auto test = [&](auto func) {
+        timer timer;
+        registry.view<stable_position, velocity, comp<0>, comp<1>, comp<2>>().each(func);
         timer.elapsed();
     };
 
@@ -860,11 +1101,11 @@ TEST(Benchmark, IterateFiveComponentsRuntime1M) {
 
     auto test = [&](auto func) {
         entt::id_type types[] = {
-            entt::type_info<position>::id(),
-            entt::type_info<velocity>::id(),
-            entt::type_info<comp<0>>::id(),
-            entt::type_info<comp<1>>::id(),
-            entt::type_info<comp<2>>::id()
+            entt::type_hash<position>::value(),
+            entt::type_hash<velocity>::value(),
+            entt::type_hash<comp<0>>::value(),
+            entt::type_hash<comp<1>>::value(),
+            entt::type_hash<comp<2>>::value()
         };
 
         timer timer;
@@ -900,11 +1141,11 @@ TEST(Benchmark, IterateFiveComponentsRuntime1MHalf) {
 
     auto test = [&](auto func) {
         entt::id_type types[] = {
-            entt::type_info<position>::id(),
-            entt::type_info<velocity>::id(),
-            entt::type_info<comp<0>>::id(),
-            entt::type_info<comp<1>>::id(),
-            entt::type_info<comp<2>>::id()
+            entt::type_hash<position>::value(),
+            entt::type_hash<velocity>::value(),
+            entt::type_hash<comp<0>>::value(),
+            entt::type_hash<comp<1>>::value(),
+            entt::type_hash<comp<2>>::value()
         };
 
         timer timer;
@@ -940,11 +1181,11 @@ TEST(Benchmark, IterateFiveComponentsRuntime1MOne) {
 
     auto test = [&](auto func) {
         entt::id_type types[] = {
-            entt::type_info<position>::id(),
-            entt::type_info<velocity>::id(),
-            entt::type_info<comp<0>>::id(),
-            entt::type_info<comp<1>>::id(),
-            entt::type_info<comp<2>>::id()
+            entt::type_hash<position>::value(),
+            entt::type_hash<velocity>::value(),
+            entt::type_hash<comp<0>>::value(),
+            entt::type_hash<comp<1>>::value(),
+            entt::type_hash<comp<2>>::value()
         };
 
         timer timer;
@@ -1050,7 +1291,7 @@ TEST(Benchmark, SortMulti) {
 
 TEST(Benchmark, AlmostSortedStdSort) {
     entt::registry registry;
-    entt::entity entities[3];
+    entt::entity entities[3]{};
 
     std::cout << "Sort 150000 entities, almost sorted, std::sort" << std::endl;
 
@@ -1080,7 +1321,7 @@ TEST(Benchmark, AlmostSortedStdSort) {
 
 TEST(Benchmark, AlmostSortedInsertionSort) {
     entt::registry registry;
-    entt::entity entities[3];
+    entt::entity entities[3]{};
 
     std::cout << "Sort 150000 entities, almost sorted, insertion sort" << std::endl;
 

@@ -1,70 +1,57 @@
+#include <utility>
 #include <gtest/gtest.h>
-#include <entt/core/hashed_string.hpp>
 #include <entt/meta/factory.hpp>
 #include <entt/meta/meta.hpp>
+#include <entt/meta/node.hpp>
 #include <entt/meta/resolve.hpp>
 
 struct clazz_t {
-    int f() const {
-        return i;
-    }
-
-    static char g(const clazz_t &type) {
-        return type.c;
-    }
-
-    int i{};
-    char c{};
+    clazz_t() = default;
+    operator int() const { return value; }
+    int value;
 };
 
+double conv_to_double(const clazz_t &instance) {
+    return instance.value * 2.;
+}
+
 struct MetaConv: ::testing::Test {
-    static void SetUpTestCase() {
-        entt::meta<double>().conv<int>();
-        entt::meta<clazz_t>().conv<&clazz_t::f>().conv<&clazz_t::g>();
+    void SetUp() override {
+        using namespace entt::literals;
+
+        entt::meta<clazz_t>()
+            .type("clazz"_hs)
+            .conv<int>()
+            .conv<conv_to_double>();
+    }
+
+    void TearDown() override {
+        entt::meta_reset();
     }
 };
 
 TEST_F(MetaConv, Functionalities) {
-    auto conv = entt::resolve<double>().conv<int>();
-    double value = 3.;
+    auto any = entt::resolve<clazz_t>().construct();
+    any.cast<clazz_t &>().value = 42;
 
-    ASSERT_TRUE(conv);
-    ASSERT_EQ(conv.parent(), entt::resolve<double>());
-    ASSERT_EQ(conv.type(), entt::resolve<int>());
+    const auto as_int = std::as_const(any).allow_cast<int>();
+    const auto as_double = std::as_const(any).allow_cast<double>();
 
-    auto any = conv.convert(&value);
+    ASSERT_FALSE(any.allow_cast<char>());
 
-    ASSERT_TRUE(any);
-    ASSERT_EQ(any.type(), entt::resolve<int>());
-    ASSERT_EQ(any.cast<int>(), 3);
+    ASSERT_TRUE(as_int);
+    ASSERT_TRUE(as_double);
+
+    ASSERT_EQ(as_int.cast<int>(), any.cast<clazz_t &>().value);
+    ASSERT_EQ(as_double.cast<double>(), conv_to_double(any.cast<clazz_t &>()));
 }
 
-TEST_F(MetaConv, AsFreeFunctions) {
-    auto conv = entt::resolve<clazz_t>().conv<int>();
-    clazz_t clazz{42, 'c'};
+TEST_F(MetaConv, ReRegistration) {
+    SetUp();
 
-    ASSERT_TRUE(conv);
-    ASSERT_EQ(conv.parent(), entt::resolve<clazz_t>());
-    ASSERT_EQ(conv.type(), entt::resolve<int>());
+    auto *node = entt::internal::meta_node<clazz_t>::resolve();
 
-    auto any = conv.convert(&clazz);
-
-    ASSERT_TRUE(any);
-    ASSERT_EQ(any.type(), entt::resolve<int>());
-    ASSERT_EQ(any.cast<int>(), 42);
-}
-
-TEST_F(MetaConv, AsMemberFunctions) {
-    auto conv = entt::resolve<clazz_t>().conv<char>();
-    clazz_t clazz{42, 'c'};
-
-    ASSERT_TRUE(conv);
-    ASSERT_EQ(conv.parent(), entt::resolve<clazz_t>());
-    ASSERT_EQ(conv.type(), entt::resolve<char>());
-
-    auto any = conv.convert(&clazz);
-
-    ASSERT_TRUE(any);
-    ASSERT_EQ(any.type(), entt::resolve<char>());
-    ASSERT_EQ(any.cast<char>(), 'c');
+    ASSERT_NE(node->conv, nullptr);
+    ASSERT_NE(node->conv->next, nullptr);
+    ASSERT_EQ(node->conv->next->next, nullptr);
 }

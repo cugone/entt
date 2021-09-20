@@ -6,13 +6,21 @@
 #include <entt/meta/resolve.hpp>
 
 struct MetaRange: ::testing::Test {
-    static void SetUpTestCase() {
+    void SetUp() override {
+        using namespace entt::literals;
+
         entt::meta<int>().type("int"_hs);
         entt::meta<double>().type("double"_hs);
+    }
+
+    void TearDown() override {
+        entt::meta_reset();
     }
 };
 
 TEST_F(MetaRange, Range) {
+    using namespace entt::literals;
+
     entt::meta_range<entt::meta_type> range{entt::internal::meta_context::local()};
     auto it = range.begin();
 
@@ -20,9 +28,9 @@ TEST_F(MetaRange, Range) {
     ASSERT_TRUE(it != range.end());
     ASSERT_FALSE(it == range.end());
 
-    ASSERT_EQ((*it).type_id(), entt::resolve<double>().type_id());
-    ASSERT_EQ((*(++it)).type_id(), entt::resolve_id("int"_hs).type_id());
-    ASSERT_EQ((*it++).type_id(), entt::resolve<int>().type_id());
+    ASSERT_EQ((*it).info(), entt::resolve<double>().info());
+    ASSERT_EQ((*(++it)).info(), entt::resolve("int"_hs).info());
+    ASSERT_EQ((*it++).info(), entt::resolve<int>().info());
 
     ASSERT_EQ(it, range.end());
 }

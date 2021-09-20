@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <type_traits>
 #include "../config/config.h"
+#include "entity.hpp"
 #include "sparse_set.hpp"
 #include "fwd.hpp"
 
@@ -54,28 +55,15 @@ namespace entt {
  * @tparam Entity A valid entity type (see entt_traits for more details).
  */
 template<typename Entity>
-class basic_runtime_view {
-    /*! @brief A registry is allowed to create views. */
-    friend class basic_registry<Entity>;
-
-    using underlying_iterator = typename sparse_set<Entity>::iterator;
+class basic_runtime_view final {
+    using basic_common_type = basic_sparse_set<Entity>;
+    using underlying_iterator = typename basic_common_type::iterator;
 
     class view_iterator final {
-        friend class basic_runtime_view<Entity>;
-
-        view_iterator(const std::vector<const sparse_set<Entity> *> &cpools, const std::vector<const sparse_set<Entity> *> &exclude, underlying_iterator curr) ENTT_NOEXCEPT
-            : pools{&cpools},
-              filter{&exclude},
-              it{curr}
-        {
-            if(it != (*pools)[0]->end() && !valid()) {
-                ++(*this);
-            }
-        }
-
         [[nodiscard]] bool valid() const {
-            return std::all_of(pools->begin()++, pools->end(), [entt = *it](const auto *curr) { return curr->contains(entt); })
-                    && std::none_of(filter->cbegin(), filter->cend(), [entt = *it](const auto *curr) { return curr && curr->contains(entt); });
+            return (no_tombstone_check || (*it != tombstone))
+                && std::all_of(pools->begin()++, pools->end(), [entt = *it](const auto *curr) { return curr->contains(entt); })
+                && std::none_of(filter->cbegin(), filter->cend(), [entt = *it](const auto *curr) { return curr && curr->contains(entt); });
         }
 
     public:
@@ -87,6 +75,17 @@ class basic_runtime_view {
 
         view_iterator() ENTT_NOEXCEPT = default;
 
+        view_iterator(const std::vector<const basic_common_type *> &cpools, const std::vector<const basic_common_type *> &ignore, underlying_iterator curr) ENTT_NOEXCEPT
+            : pools{&cpools},
+              filter{&ignore},
+              it{curr},
+              no_tombstone_check{std::all_of(pools->cbegin(), pools->cend(), [](const basic_common_type *cpool) { return (cpool->policy() == deletion_policy::swap_and_pop); })}
+        {
+            if(it != (*pools)[0]->end() && !valid()) {
+                ++(*this);
+            }
+        }
+
         view_iterator & operator++() {
             while(++it != (*pools)[0]->end() && !valid());
             return *this;
@@ -94,7 +93,7 @@ class basic_runtime_view {
 
         view_iterator operator++(int) {
             view_iterator orig = *this;
-            return operator++(), orig;
+            return ++(*this), orig;
         }
 
         view_iterator & operator--() ENTT_NOEXCEPT {
@@ -124,22 +123,11 @@ class basic_runtime_view {
         }
 
     private:
-        const std::vector<const sparse_set<Entity> *> *pools;
-        const std::vector<const sparse_set<Entity> *> *filter;
+        const std::vector<const basic_common_type *> *pools;
+        const std::vector<const basic_common_type *> *filter;
         underlying_iterator it;
+        bool no_tombstone_check;
     };
-
-    basic_runtime_view(std::vector<const sparse_set<Entity> *> cpools, std::vector<const sparse_set<Entity> *> exclude) ENTT_NOEXCEPT
-        : pools{std::move(cpools)},
-          filter{std::move(exclude)}
-    {
-        const auto it = std::min_element(pools.begin(), pools.end(), [](const auto *lhs, const auto *rhs) {
-            return (!lhs && rhs) || (lhs && rhs && lhs->size() < rhs->size());
-        });
-
-        // brings the best candidate (if any) on front of the vector
-        std::rotate(pools.begin(), it, pools.end());
-    }
 
     [[nodiscard]] bool valid() const {
         return !pools.empty() && pools.front();
@@ -153,20 +141,33 @@ public:
     /*! @brief Bidirectional iterator type. */
     using iterator = view_iterator;
 
+    /*! @brief Default constructor to use to create empty, invalid views. */
+    basic_runtime_view() ENTT_NOEXCEPT
+        : pools{},
+          filter{}
+    {}
+
     /**
-     * @brief Estimates the number of entities that have the given components.
-     * @return Estimated number of entities that have the given components.
+     * @brief Constructs a runtime view from a set of storage classes.
+     * @param cpools The storage for the types to iterate.
+     * @param epools The storage for the types used to filter the view.
      */
-    [[nodiscard]] size_type size() const {
-        return valid() ? pools.front()->size() : size_type{};
+    basic_runtime_view(std::vector<const basic_common_type *> cpools, std::vector<const basic_common_type *> epools) ENTT_NOEXCEPT
+        : pools{std::move(cpools)},
+          filter{std::move(epools)}
+    {
+        // brings the best candidate (if any) on front of the vector
+        std::rotate(pools.begin(), std::min_element(pools.begin(), pools.end(), [](const auto *lhs, const auto *rhs) {
+            return (!lhs && rhs) || (lhs && rhs && lhs->size() < rhs->size());
+        }), pools.end());
     }
 
     /**
-     * @brief Checks if the view is definitely empty.
-     * @return True if the view is definitely empty, false otherwise.
+     * @brief Estimates the number of entities iterated by the view.
+     * @return Estimated number of entities iterated by the view.
      */
-    [[nodiscard]] bool empty() const {
-        return !valid() || pools.front()->empty();
+    [[nodiscard]] size_type size_hint() const {
+        return valid() ? pools.front()->size() : size_type{};
     }
 
     /**
@@ -176,10 +177,6 @@ public:
      * The returned iterator points to the first entity that has the given
      * components. If the view is empty, the returned iterator will be equal to
      * `end()`.
-     *
-     * @note
-     * Iterators stay true to the order imposed to the underlying data
-     * structures.
      *
      * @return An iterator to the first entity that has the given components.
      */
@@ -195,10 +192,6 @@ public:
      * has the given components. Attempting to dereference the returned iterator
      * results in undefined behavior.
      *
-     * @note
-     * Iterators stay true to the order imposed to the underlying data
-     * structures.
-     *
      * @return An iterator to the entity following the last entity that has the
      * given components.
      */
@@ -208,7 +201,7 @@ public:
 
     /**
      * @brief Checks if a view contains an entity.
-     * @param entt A valid entity identifier.
+     * @param entt A valid identifier.
      * @return True if the view contains the given entity, false otherwise.
      */
     [[nodiscard]] bool contains(const entity_type entt) const {
@@ -239,8 +232,8 @@ public:
     }
 
 private:
-    std::vector<const sparse_set<Entity> *> pools;
-    std::vector<const sparse_set<Entity> *> filter;
+    std::vector<const basic_common_type *> pools;
+    std::vector<const basic_common_type *> filter;
 };
 
 

@@ -208,6 +208,14 @@ struct scoped_connection {
     /*! @brief Default copy constructor, deleted on purpose. */
     scoped_connection(const scoped_connection &) = delete;
 
+    /**
+     * @brief Move constructor.
+     * @param other The scoped connection to move from.
+     */
+    scoped_connection(scoped_connection &&other) ENTT_NOEXCEPT
+        : conn{std::exchange(other.conn, {})}
+    {}
+
     /*! @brief Automatically breaks the link on destruction. */
     ~scoped_connection() {
         conn.release();
@@ -218,6 +226,16 @@ struct scoped_connection {
      * @return This scoped connection.
      */
     scoped_connection & operator=(const scoped_connection &) = delete;
+
+    /**
+     * @brief Move assignment operator.
+     * @param other The scoped connection to move from.
+     * @return This scoped connection.
+     */
+    scoped_connection & operator=(scoped_connection &&other) ENTT_NOEXCEPT {
+        conn = std::exchange(other.conn, {});
+        return *this;
+    }
 
     /**
      * @brief Acquires a connection.
@@ -257,6 +275,10 @@ private:
  * The clear separation between a signal and a sink permits to store the former
  * as private data member without exposing the publish functionality to the
  * users of the class.
+ *
+ * @warning
+ * Lifetime of a sink must not overcome that of the signal to which it refers.
+ * In any other case, attempting to use a sink results in undefined behavior.
  *
  * @tparam Ret Return type of a function type.
  * @tparam Args Types of arguments of a function type.
@@ -324,7 +346,7 @@ public:
     template<auto Candidate, typename Type>
     [[nodiscard]] sink before(Type &&value_or_instance) {
         delegate<Ret(Args...)> call{};
-        call.template connect<Candidate>(std::forward<Type>(value_or_instance));
+        call.template connect<Candidate>(value_or_instance);
 
         const auto &calls = signal->calls;
         const auto it = std::find(calls.cbegin(), calls.cend(), std::move(call));
@@ -454,7 +476,7 @@ public:
     void disconnect(Type &&value_or_instance) {
         auto &calls = signal->calls;
         delegate<Ret(Args...)> call{};
-        call.template connect<Candidate>(std::forward<Type>(value_or_instance));
+        call.template connect<Candidate>(value_or_instance);
         calls.erase(std::remove(calls.begin(), calls.end(), std::move(call)), calls.end());
     }
 
@@ -506,7 +528,8 @@ private:
  * @tparam Args Types of arguments of a function type.
  */
 template<typename Ret, typename... Args>
-sink(sigh<Ret(Args...)> &) ENTT_NOEXCEPT -> sink<Ret(Args...)>;
+sink(sigh<Ret(Args...)> &)
+-> sink<Ret(Args...)>;
 
 
 }
