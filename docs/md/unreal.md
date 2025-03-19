@@ -1,18 +1,14 @@
 # EnTT and Unreal Engine
 
-<!--
-@cond TURN_OFF_DOXYGEN
--->
 # Table of Contents
 
 * [Enable Cpp17](#enable-cpp17)
 * [EnTT as a third party module](#entt-as-a-third-party-module)
 * [Include EnTT](#include-entt)
-<!--
-@endcond TURN_OFF_DOXYGEN
--->
 
 ## Enable Cpp17
+
+> Skip this part if you are working with UE5, Since UE5 uses cpp17 by default.
 
 As of writing (Unreal Engine v4.25), the default C++ standard of Unreal Engine
 is C++14.<br/>
@@ -28,7 +24,7 @@ CppStandard = CppStandardVersion.Cpp17;
 
 Replace `<PCH filename>.h` with the name of the already existing PCH header
 file, if any.<br/>
-In case the project doesn't already contain a file of this type, it's possible
+In case the project does not already contain a file of this type, it is possible
 to create one with the following content:
 
 ```cpp
@@ -41,8 +37,8 @@ this point, C++17 support should be in place.<br/>
 Try to compile the project to ensure it works as expected before following
 further steps.
 
-Note that updating a *project* to C++17 doesn't necessarily mean that the IDE in
-use will also start to recognize its syntax.<br/>
+Note that updating a *project* to C++17 does not necessarily mean that the IDE
+in use will also start to recognize its syntax.<br/>
 If the plan is to use C++17 in the project too, check the specific instructions
 for the IDE in use.
 
@@ -66,8 +62,8 @@ Source
       \---entt (GitHub repository content inside)
 ```
 
-To make this happen, create the folder `ThirdParty` under `Source` if it doesn't
-exist already. Then, add an `EnTT` folder under `ThirdParty`.<br/>
+To make this happen, create the folder `ThirdParty` under `Source` if it does
+not exist already. Then, add an `EnTT` folder under `ThirdParty`.<br/>
 Within the latter, create a new file `EnTT.Build.cs` with the following content:
 
 ```cs

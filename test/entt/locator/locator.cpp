@@ -1,48 +1,90 @@
+#include <memory>
 #include <gtest/gtest.h>
 #include <entt/locator/locator.hpp>
+#include "../../common/config.h"
 
-struct a_service {};
-
-struct another_service {
-    virtual ~another_service() = default;
-    virtual void f(bool) = 0;
-    bool check{false};
+struct base_service {
+    virtual ~base_service() = default;
+    virtual int invoke(int) = 0;
 };
 
-struct derived_service: another_service {
-    derived_service(int): another_service{} {}
-    void f(bool b) override { check = b; }
+struct derived_service: base_service {
+    derived_service(int val)
+        : value{val} {}
+
+    int invoke(int other) override {
+        return value + other;
+    }
+
+private:
+    int value;
 };
 
-TEST(ServiceLocator, Functionalities) {
-    ASSERT_TRUE(entt::service_locator<a_service>::empty());
-    ASSERT_TRUE(entt::service_locator<another_service>::empty());
+struct ServiceLocator: ::testing::Test {
+    void SetUp() override {
+        entt::locator<base_service>::reset();
+    }
+};
 
-    entt::service_locator<a_service>::set();
+using ServiceLocatorDeathTest = ServiceLocator;
 
-    ASSERT_FALSE(entt::service_locator<a_service>::empty());
-    ASSERT_TRUE(entt::service_locator<another_service>::empty());
+TEST_F(ServiceLocator, ValueAndTheLike) {
+    ASSERT_FALSE(entt::locator<base_service>::has_value());
+    ASSERT_EQ(entt::locator<base_service>::value_or<derived_service>(1).invoke(3), 4);
+    ASSERT_TRUE(entt::locator<base_service>::has_value());
+    ASSERT_EQ(entt::locator<base_service>::value().invoke(9), 10);
+}
 
-    entt::service_locator<a_service>::reset();
+TEST_F(ServiceLocator, Emplace) {
+    ASSERT_FALSE(entt::locator<base_service>::has_value());
+    ASSERT_EQ(entt::locator<base_service>::emplace<derived_service>(5).invoke(1), 6);
+    ASSERT_TRUE(entt::locator<base_service>::has_value());
+    ASSERT_EQ(entt::locator<base_service>::value().invoke(3), 8);
 
-    ASSERT_TRUE(entt::service_locator<a_service>::empty());
-    ASSERT_TRUE(entt::service_locator<another_service>::empty());
+    entt::locator<base_service>::reset();
 
-    entt::service_locator<a_service>::set(std::make_shared<a_service>());
+    ASSERT_FALSE(entt::locator<base_service>::has_value());
+    ASSERT_EQ(entt::locator<base_service>::emplace<derived_service>(std::allocator_arg, std::allocator<derived_service>{}, 5).invoke(1), 6);
+    ASSERT_TRUE(entt::locator<base_service>::has_value());
+    ASSERT_EQ(entt::locator<base_service>::value().invoke(3), 8);
+}
 
-    ASSERT_FALSE(entt::service_locator<a_service>::empty());
-    ASSERT_TRUE(entt::service_locator<another_service>::empty());
+TEST_F(ServiceLocator, ResetHandle) {
+    entt::locator<base_service>::emplace<derived_service>(1);
+    auto handle = entt::locator<base_service>::handle();
 
-    entt::service_locator<another_service>::set<derived_service>(42);
+    ASSERT_TRUE(entt::locator<base_service>::has_value());
+    ASSERT_EQ(entt::locator<base_service>::value().invoke(3), 4);
 
-    ASSERT_FALSE(entt::service_locator<a_service>::empty());
-    ASSERT_FALSE(entt::service_locator<another_service>::empty());
+    entt::locator<base_service>::reset();
 
-    entt::service_locator<another_service>::get().lock()->f(!entt::service_locator<another_service>::get().lock()->check);
+    ASSERT_FALSE(entt::locator<base_service>::has_value());
 
-    ASSERT_TRUE(entt::service_locator<another_service>::get().lock()->check);
+    entt::locator<base_service>::reset(handle);
 
-    entt::service_locator<another_service>::ref().f(!entt::service_locator<another_service>::get().lock()->check);
+    ASSERT_TRUE(entt::locator<base_service>::has_value());
+    ASSERT_EQ(entt::locator<base_service>::value().invoke(3), 4);
+}
 
-    ASSERT_FALSE(entt::service_locator<another_service>::get().lock()->check);
+TEST_F(ServiceLocator, ElementWithDeleter) {
+    derived_service service{1};
+    entt::locator<base_service>::reset(&service, [&service](base_service *serv) {
+        ASSERT_EQ(serv, &service);
+        service = derived_service{2};
+    });
+
+    ASSERT_TRUE(entt::locator<base_service>::has_value());
+    ASSERT_EQ(entt::locator<base_service>::value().invoke(1), 2);
+
+    entt::locator<base_service>::reset();
+
+    ASSERT_EQ(service.invoke(1), 3);
+}
+
+ENTT_DEBUG_TEST_F(ServiceLocatorDeathTest, UninitializedValue) {
+    ASSERT_EQ(entt::locator<base_service>::value_or<derived_service>(1).invoke(1), 2);
+
+    entt::locator<base_service>::reset();
+
+    ASSERT_DEATH(entt::locator<base_service>::value().invoke(4), "");
 }

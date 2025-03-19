@@ -1,67 +1,53 @@
 #include <gtest/gtest.h>
 #include <entt/core/enum.hpp>
-#include <entt/core/type_traits.hpp>
+#include "../../common/bitmask.h"
 
-enum class detected {
-    foo = 0x01,
-    bar = 0x02,
-    quux = 0x04,
-    _entt_enum_as_bitmask
+template<typename Type>
+struct Enum: testing::Test {
+    using type = Type;
 };
 
-enum class registered {
-    foo = 0x01,
-    bar = 0x02,
-    quux = 0x04
-};
+using EnumTypes = ::testing::Types<test::enum_is_bitmask, test::enum_as_bitmask>;
 
-template<>
-struct entt::enum_as_bitmask<registered>
-    : std::true_type
-{};
+TYPED_TEST_SUITE(Enum, EnumTypes, );
 
-TEST(Enum, Functionalities) {
-    auto test = [](auto identity) {
-        using enum_type = typename decltype(identity)::type;
+TYPED_TEST(Enum, Functionalities) {
+    using enum_type = typename TestFixture::type;
 
-        ASSERT_TRUE(!!((enum_type::foo | enum_type::bar) & enum_type::foo));
-        ASSERT_TRUE(!!((enum_type::foo | enum_type::bar) & enum_type::bar));
-        ASSERT_TRUE(!((enum_type::foo | enum_type::bar) & enum_type::quux));
+    ASSERT_TRUE(!!((enum_type::foo | enum_type::bar) & enum_type::foo));
+    ASSERT_TRUE(!!((enum_type::foo | enum_type::bar) & enum_type::bar));
+    ASSERT_TRUE(!((enum_type::foo | enum_type::bar) & enum_type::quux));
 
-        ASSERT_TRUE(!!((enum_type::foo ^ enum_type::bar) & enum_type::foo));
-        ASSERT_TRUE(!((enum_type::foo ^ enum_type::foo) & enum_type::foo));
+    ASSERT_TRUE(!!((enum_type::foo ^ enum_type::bar) & enum_type::foo));
+    ASSERT_TRUE(!((enum_type::foo ^ enum_type::foo) & enum_type::foo));
 
-        ASSERT_TRUE(!(~enum_type::foo & enum_type::foo));
-        ASSERT_TRUE(!!(~enum_type::foo & enum_type::bar));
+    ASSERT_TRUE(!(~enum_type::foo & enum_type::foo));
+    ASSERT_TRUE(!!(~enum_type::foo & enum_type::bar));
 
-        ASSERT_TRUE(enum_type::foo == enum_type::foo);
-        ASSERT_TRUE(enum_type::foo != enum_type::bar);
+    ASSERT_TRUE(enum_type::foo == enum_type::foo);
+    ASSERT_TRUE(enum_type::foo != enum_type::bar);
 
-        enum_type value = enum_type::foo;
+    enum_type value = enum_type::foo;
 
-        ASSERT_TRUE(!!(value & enum_type::foo));
-        ASSERT_TRUE(!(value & enum_type::bar));
-        ASSERT_TRUE(!(value & enum_type::quux));
+    ASSERT_TRUE(!!(value & enum_type::foo));
+    ASSERT_TRUE(!(value & enum_type::bar));
+    ASSERT_TRUE(!(value & enum_type::quux));
 
-        value |= (enum_type::bar | enum_type::quux);
+    value |= (enum_type::bar | enum_type::quux);
 
-        ASSERT_TRUE(!!(value & enum_type::foo));
-        ASSERT_TRUE(!!(value & enum_type::bar));
-        ASSERT_TRUE(!!(value & enum_type::quux));
+    ASSERT_TRUE(!!(value & enum_type::foo));
+    ASSERT_TRUE(!!(value & enum_type::bar));
+    ASSERT_TRUE(!!(value & enum_type::quux));
 
-        value &= (enum_type::bar | enum_type::quux);
+    value &= (enum_type::bar | enum_type::quux);
 
-        ASSERT_TRUE(!(value & enum_type::foo));
-        ASSERT_TRUE(!!(value & enum_type::bar));
-        ASSERT_TRUE(!!(value & enum_type::quux));
+    ASSERT_TRUE(!(value & enum_type::foo));
+    ASSERT_TRUE(!!(value & enum_type::bar));
+    ASSERT_TRUE(!!(value & enum_type::quux));
 
-        value ^= enum_type::bar;
+    value ^= enum_type::bar;
 
-        ASSERT_TRUE(!(value & enum_type::foo));
-        ASSERT_TRUE(!(value & enum_type::bar));
-        ASSERT_TRUE(!!(value & enum_type::quux));
-    };
-
-    test(entt::type_identity<detected>{});
-    test(entt::type_identity<registered>{});
+    ASSERT_TRUE(!(value & enum_type::foo));
+    ASSERT_TRUE(!(value & enum_type::bar));
+    ASSERT_TRUE(!!(value & enum_type::quux));
 }

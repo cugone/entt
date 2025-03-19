@@ -1,81 +1,107 @@
 #ifndef ENTT_CONFIG_CONFIG_H
 #define ENTT_CONFIG_CONFIG_H
 
+#include "version.h"
+
+// NOLINTBEGIN(cppcoreguidelines-macro-usage)
 
 #if defined(__cpp_exceptions) && !defined(ENTT_NOEXCEPTION)
-#   define ENTT_NOEXCEPT noexcept
-#   define ENTT_THROW throw
-#   define ENTT_TRY try
-#   define ENTT_CATCH catch(...)
+#    define ENTT_CONSTEXPR
+#    define ENTT_THROW throw
+#    define ENTT_TRY try
+#    define ENTT_CATCH catch(...)
 #else
-#   define ENTT_NOEXCEPT
-#   define ENTT_THROW
-#   define ENTT_TRY if(true)
-#   define ENTT_CATCH if(false)
+#    define ENTT_CONSTEXPR constexpr // use only with throwing functions (waiting for C++20)
+#    define ENTT_THROW
+#    define ENTT_TRY if(true)
+#    define ENTT_CATCH if(false)
 #endif
 
-
-#if defined(__cpp_lib_launder) && __cpp_lib_launder >= 201606L
-#   include <new>
-#   define ENTT_LAUNDER(expr) std::launder(expr)
-#else
-#   define ENTT_LAUNDER(expr) expr
+#if __has_include(<version>)
+#    include <version>
+#
+#    if defined(__cpp_consteval)
+#        define ENTT_CONSTEVAL consteval
+#    endif
 #endif
 
-
-#ifndef ENTT_USE_ATOMIC
-#   define ENTT_MAYBE_ATOMIC(Type) Type
-#else
-#   include <atomic>
-#   define ENTT_MAYBE_ATOMIC(Type) std::atomic<Type>
+#ifndef ENTT_CONSTEVAL
+#    define ENTT_CONSTEVAL constexpr
 #endif
 
+#ifdef ENTT_USE_ATOMIC
+#    include <atomic>
+#    define ENTT_MAYBE_ATOMIC(Type) std::atomic<Type>
+#else
+#    define ENTT_MAYBE_ATOMIC(Type) Type
+#endif
 
 #ifndef ENTT_ID_TYPE
-#   include <cstdint>
-#   define ENTT_ID_TYPE std::uint32_t
+#    include <cstdint>
+#    define ENTT_ID_TYPE std::uint32_t
+#else
+#    include <cstdint> // provides coverage for types in the std namespace
 #endif
-
 
 #ifndef ENTT_SPARSE_PAGE
-#   define ENTT_SPARSE_PAGE 4096
+#    define ENTT_SPARSE_PAGE 4096
 #endif
-
 
 #ifndef ENTT_PACKED_PAGE
-#   define ENTT_PACKED_PAGE 1024
+#    define ENTT_PACKED_PAGE 1024
 #endif
-
 
 #ifdef ENTT_DISABLE_ASSERT
-#   undef ENTT_ASSERT
-#   define ENTT_ASSERT(...) (void(0))
+#    undef ENTT_ASSERT
+#    define ENTT_ASSERT(condition, msg) (void(0))
 #elif !defined ENTT_ASSERT
-#   include <cassert>
-#   define ENTT_ASSERT(condition, ...) assert(condition)
+#    include <cassert>
+#    define ENTT_ASSERT(condition, msg) assert(((condition) && (msg)))
 #endif
 
+#ifdef ENTT_DISABLE_ASSERT
+#    undef ENTT_ASSERT_CONSTEXPR
+#    define ENTT_ASSERT_CONSTEXPR(condition, msg) (void(0))
+#elif !defined ENTT_ASSERT_CONSTEXPR
+#    define ENTT_ASSERT_CONSTEXPR(condition, msg) ENTT_ASSERT(condition, msg)
+#endif
+
+#define ENTT_FAIL(msg) ENTT_ASSERT(false, msg);
 
 #ifdef ENTT_NO_ETO
-#   include <type_traits>
-#   define ENTT_IGNORE_IF_EMPTY std::false_type
+#    define ENTT_ETO_TYPE(Type) void
 #else
-#   include <type_traits>
-#   define ENTT_IGNORE_IF_EMPTY std::true_type
+#    define ENTT_ETO_TYPE(Type) Type
 #endif
 
+#ifdef ENTT_NO_MIXIN
+#    define ENTT_STORAGE(Mixin, ...) __VA_ARGS__
+#else
+#    define ENTT_STORAGE(Mixin, ...) Mixin<__VA_ARGS__>
+#endif
 
-#ifndef ENTT_STANDARD_CPP
+#ifdef ENTT_STANDARD_CPP
+#    define ENTT_NONSTD false
+#else
+#    define ENTT_NONSTD true
 #    if defined __clang__ || defined __GNUC__
-#       define ENTT_PRETTY_FUNCTION __PRETTY_FUNCTION__
-#       define ENTT_PRETTY_FUNCTION_PREFIX '='
-#       define ENTT_PRETTY_FUNCTION_SUFFIX ']'
+#        define ENTT_PRETTY_FUNCTION __PRETTY_FUNCTION__
+#        define ENTT_PRETTY_FUNCTION_PREFIX '='
+#        define ENTT_PRETTY_FUNCTION_SUFFIX ']'
 #    elif defined _MSC_VER
-#       define ENTT_PRETTY_FUNCTION __FUNCSIG__
-#       define ENTT_PRETTY_FUNCTION_PREFIX '<'
-#       define ENTT_PRETTY_FUNCTION_SUFFIX '>'
-#   endif
+#        define ENTT_PRETTY_FUNCTION __FUNCSIG__
+#        define ENTT_PRETTY_FUNCTION_PREFIX '<'
+#        define ENTT_PRETTY_FUNCTION_SUFFIX '>'
+#    endif
 #endif
 
+#if defined _MSC_VER
+#    pragma detect_mismatch("entt.version", ENTT_VERSION)
+#    pragma detect_mismatch("entt.noexcept", ENTT_XSTR(ENTT_TRY))
+#    pragma detect_mismatch("entt.id", ENTT_XSTR(ENTT_ID_TYPE))
+#    pragma detect_mismatch("entt.nonstd", ENTT_XSTR(ENTT_NONSTD))
+#endif
+
+// NOLINTEND(cppcoreguidelines-macro-usage)
 
 #endif

@@ -1,130 +1,169 @@
+#include <functional>
+#include <memory>
+#include <utility>
 #include <gtest/gtest.h>
-#include <entt/core/type_traits.hpp>
 #include <entt/signal/emitter.hpp>
+#include "../../common/boxed_type.h"
+#include "../../common/emitter.h"
+#include "../../common/empty.h"
+#include "../../common/linter.hpp"
 
-struct test_emitter: entt::emitter<test_emitter> {};
+TEST(Emitter, Move) {
+    test::emitter emitter{};
+    emitter.on<test::boxed_int>([](auto &, const auto &) {});
 
-struct foo_event { int i; char c; };
-struct bar_event {};
-struct quux_event {};
+    ASSERT_FALSE(emitter.empty());
+    ASSERT_TRUE(emitter.contains<test::boxed_int>());
+
+    test::emitter other{std::move(emitter)};
+
+    test::is_initialized(emitter);
+
+    ASSERT_FALSE(other.empty());
+    ASSERT_TRUE(other.contains<test::boxed_int>());
+    ASSERT_TRUE(emitter.empty());
+
+    emitter = std::move(other);
+    test::is_initialized(other);
+
+    ASSERT_FALSE(emitter.empty());
+    ASSERT_TRUE(emitter.contains<test::boxed_int>());
+    ASSERT_TRUE(other.empty());
+}
+
+TEST(Emitter, Swap) {
+    test::emitter emitter{};
+    test::emitter other{};
+    int value{};
+
+    emitter.on<test::boxed_int>([&value](auto &event, const auto &) {
+        value = event.value;
+    });
+
+    ASSERT_FALSE(emitter.empty());
+    ASSERT_TRUE(other.empty());
+
+    emitter.swap(other);
+    emitter.publish(test::boxed_int{1});
+
+    ASSERT_EQ(value, 0);
+    ASSERT_TRUE(emitter.empty());
+    ASSERT_FALSE(other.empty());
+
+    other.publish(test::boxed_int{1});
+
+    ASSERT_EQ(value, 1);
+}
 
 TEST(Emitter, Clear) {
-    test_emitter emitter;
+    test::emitter emitter{};
 
     ASSERT_TRUE(emitter.empty());
 
-    emitter.on<foo_event>([](auto &, const auto &){});
-    emitter.once<quux_event>([](const auto &, const auto &){});
+    emitter.on<test::boxed_int>([](auto &, const auto &) {});
+    emitter.on<test::boxed_char>([](const auto &, const auto &) {});
 
     ASSERT_FALSE(emitter.empty());
-    ASSERT_FALSE(emitter.empty<foo_event>());
-    ASSERT_FALSE(emitter.empty<quux_event>());
-    ASSERT_TRUE(emitter.empty<bar_event>());
+    ASSERT_TRUE(emitter.contains<test::boxed_int>());
+    ASSERT_TRUE(emitter.contains<test::boxed_char>());
+    ASSERT_FALSE(emitter.contains<test::empty>());
 
-    emitter.clear<bar_event>();
-
-    ASSERT_FALSE(emitter.empty());
-    ASSERT_FALSE(emitter.empty<foo_event>());
-    ASSERT_FALSE(emitter.empty<quux_event>());
-    ASSERT_TRUE(emitter.empty<bar_event>());
-
-    emitter.clear<foo_event>();
+    emitter.erase<test::empty>();
 
     ASSERT_FALSE(emitter.empty());
-    ASSERT_TRUE(emitter.empty<foo_event>());
-    ASSERT_FALSE(emitter.empty<quux_event>());
-    ASSERT_TRUE(emitter.empty<bar_event>());
+    ASSERT_TRUE(emitter.contains<test::boxed_int>());
+    ASSERT_TRUE(emitter.contains<test::boxed_char>());
+    ASSERT_FALSE(emitter.contains<test::empty>());
 
-    emitter.on<foo_event>([](auto &, const auto &){});
-    emitter.on<bar_event>([](const auto &, const auto &){});
+    emitter.erase<test::boxed_int>();
 
     ASSERT_FALSE(emitter.empty());
-    ASSERT_FALSE(emitter.empty<foo_event>());
-    ASSERT_FALSE(emitter.empty<quux_event>());
-    ASSERT_FALSE(emitter.empty<bar_event>());
+    ASSERT_FALSE(emitter.contains<test::boxed_int>());
+    ASSERT_TRUE(emitter.contains<test::boxed_char>());
+    ASSERT_FALSE(emitter.contains<test::empty>());
+
+    emitter.on<test::boxed_int>([](auto &, const auto &) {});
+    emitter.on<test::empty>([](const auto &, const auto &) {});
+
+    ASSERT_FALSE(emitter.empty());
+    ASSERT_TRUE(emitter.contains<test::boxed_int>());
+    ASSERT_TRUE(emitter.contains<test::boxed_char>());
+    ASSERT_TRUE(emitter.contains<test::empty>());
 
     emitter.clear();
 
     ASSERT_TRUE(emitter.empty());
-    ASSERT_TRUE(emitter.empty<foo_event>());
-    ASSERT_TRUE(emitter.empty<bar_event>());
+    ASSERT_FALSE(emitter.contains<test::boxed_int>());
+    ASSERT_FALSE(emitter.contains<test::empty>());
 }
 
-TEST(Emitter, ClearPublishing) {
-    test_emitter emitter;
+TEST(Emitter, ClearFromCallback) {
+    test::emitter emitter{};
 
     ASSERT_TRUE(emitter.empty());
 
-    emitter.once<foo_event>([](auto &, auto &em){
-        em.template once<foo_event>([](auto &, auto &){});
-        em.template clear<foo_event>();
+    emitter.on<test::boxed_int>([](auto &, auto &owner) {
+        owner.template on<test::boxed_int>([](auto &, auto &) {});
+        owner.template erase<test::boxed_int>();
     });
 
-    emitter.on<bar_event>([](const auto &, auto &em){
-        em.template once<bar_event>([](const auto &, auto &){});
-        em.template clear<bar_event>();
+    emitter.on<test::empty>([](const auto &, auto &owner) {
+        owner.template on<test::empty>([](const auto &, auto &) {});
+        owner.template erase<test::empty>();
     });
 
     ASSERT_FALSE(emitter.empty());
 
-    emitter.publish<foo_event>();
-    emitter.publish<bar_event>();
+    emitter.publish(test::boxed_int{});
+    emitter.publish(test::empty{});
 
     ASSERT_TRUE(emitter.empty());
 }
 
 TEST(Emitter, On) {
-    test_emitter emitter;
+    test::emitter emitter{};
+    int value{};
 
-    emitter.on<foo_event>([](auto &, const auto &){});
-
-    ASSERT_FALSE(emitter.empty());
-    ASSERT_FALSE(emitter.empty<foo_event>());
-
-    emitter.publish<foo_event>(0, 'c');
+    emitter.on<test::boxed_int>([&value](auto &event, const auto &) {
+        value = event.value;
+    });
 
     ASSERT_FALSE(emitter.empty());
-    ASSERT_FALSE(emitter.empty<foo_event>());
-}
+    ASSERT_TRUE(emitter.contains<test::boxed_int>());
+    ASSERT_EQ(value, 0);
 
-TEST(Emitter, Once) {
-    test_emitter emitter;
+    emitter.publish(test::boxed_int{1});
 
-    emitter.once<bar_event>([](const auto &, const auto &){});
-
-    ASSERT_FALSE(emitter.empty());
-    ASSERT_FALSE(emitter.empty<bar_event>());
-
-    emitter.publish<bar_event>();
-
-    ASSERT_TRUE(emitter.empty());
-    ASSERT_TRUE(emitter.empty<bar_event>());
-}
-
-TEST(Emitter, OnceAndErase) {
-    test_emitter emitter;
-
-    auto conn = emitter.once<foo_event>([](auto &, const auto &){});
-
-    ASSERT_FALSE(emitter.empty());
-    ASSERT_FALSE(emitter.empty<foo_event>());
-
-    emitter.erase(conn);
-
-    ASSERT_TRUE(emitter.empty());
-    ASSERT_TRUE(emitter.empty<foo_event>());
+    ASSERT_EQ(value, 1);
 }
 
 TEST(Emitter, OnAndErase) {
-    test_emitter emitter;
+    test::emitter emitter{};
+    const std::function<void(test::empty &, test::emitter &)> func{};
 
-    auto conn = emitter.on<bar_event>([](const auto &, const auto &){});
+    emitter.on(func);
 
     ASSERT_FALSE(emitter.empty());
-    ASSERT_FALSE(emitter.empty<bar_event>());
+    ASSERT_TRUE(emitter.contains<test::empty>());
 
-    emitter.erase(conn);
+    emitter.erase<test::empty>();
 
     ASSERT_TRUE(emitter.empty());
-    ASSERT_TRUE(emitter.empty<bar_event>());
+    ASSERT_FALSE(emitter.contains<test::empty>());
+}
+
+TEST(Emitter, CustomAllocator) {
+    const std::allocator<void> allocator{};
+    test::emitter emitter{allocator};
+
+    ASSERT_EQ(emitter.get_allocator(), allocator);
+    ASSERT_FALSE(emitter.get_allocator() != allocator);
+
+    emitter.on<test::boxed_int>([](auto &, const auto &) {});
+    const decltype(emitter) other{std::move(emitter), allocator};
+
+    test::is_initialized(emitter);
+
+    ASSERT_TRUE(emitter.empty());
+    ASSERT_FALSE(other.empty());
 }
